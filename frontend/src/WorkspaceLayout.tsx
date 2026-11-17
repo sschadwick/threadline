@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { DashboardState } from "./model";
 
-export type View = "projects" | "revisit" | "inbox";
+export type View = "projects" | "revisit" | "inbox" | "patterns" | "outbox";
 
 const views: Record<View, { label: string; title: string; description: string; symbol: string }> = {
   projects: {
@@ -15,6 +15,14 @@ const views: Record<View, { label: string; title: string; description: string; s
   inbox: {
     label: "Session inbox", title: "Session inbox", symbol: "▱",
     description: "Find related conversations and bring them into a project.",
+  },
+  patterns: {
+    label: "Agentic Patterns", title: "Agentic Patterns", symbol: "◇",
+    description: "Choose a workflow and prepare a kickoff for a project.",
+  },
+  outbox: {
+    label: "Outbox", title: "Outbox", symbol: "⇥",
+    description: "Review session results and proposals before they update a project.",
   },
 };
 
@@ -31,6 +39,7 @@ interface Props {
 export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh, onNewProject, children }: Props) {
   const active = views[view];
   const stale = data?.projects.filter((project) => project.revisit).length || 0;
+  const pending = data?.outbox.filter((run) => Object.values(run.review).includes("pending")).length || 0;
   const scans = data && new Date(data.scanned * 1000).toLocaleTimeString([], {
     hour: "numeric", minute: "2-digit",
   });
@@ -40,7 +49,7 @@ export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh,
   ].filter(Boolean).join(" ");
 
   return <>
-    <a className="skip" href="#main">Skip to projects</a>
+    <a className="skip" href="#main">Skip to content</a>
     <aside className="sidebar" aria-label="Workspace">
       <div className="brand"><span className="mark" aria-hidden="true"><i /><i /><i /></span>Threadline</div>
       <nav aria-label="Views" className="nav">
@@ -49,6 +58,7 @@ export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh,
             onClick={() => onNavigate(key)}>
             <span aria-hidden="true">{views[key].symbol}</span> {views[key].label}
             {key === "revisit" && stale > 0 && <small>{stale.toLocaleString()}</small>}
+            {key === "outbox" && pending > 0 && <small>{pending.toLocaleString()}</small>}
           </button>,
         )}
       </nav>
@@ -72,9 +82,9 @@ export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh,
       <div className="page">
         <div className="page-heading">
           <div><h1>{active.title}</h1><p>{active.description}</p></div>
-          <button type="button" className="button primary" id="add" disabled={!data} onClick={onNewProject}>
+          {view !== "patterns" && view !== "outbox" && <button type="button" className="button primary" id="add" disabled={!data} onClick={onNewProject}>
             <span aria-hidden="true">＋</span> New project
-          </button>
+          </button>}
         </div>
         {data?.demo && <p id="demo-note" className="demo-note">Demo workspace · Changes last until you close Threadline.</p>}
         {notes && <div className="data-note">{notes}</div>}

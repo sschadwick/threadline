@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import signal
 import tempfile
 import threading
 import time
@@ -18,29 +19,40 @@ from . import __version__
 from .demo import demo_content
 from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_project_labels
+from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
+from .runner import PROVIDERS, RunError, Runner
 
 WEB = files("threadline").joinpath("web")
 STATUSES = ("In progress", "Prototype", "Planned", "Blocked", "Parked", "Completed")
 FIELDS = {"name": 100, "area": 70, "summary": 2400, "next": 800, "evidence": 300}
 ASSETS = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
           "/style.css": ("style.css", "text/css")}
+RUN_FIELDS = ("id", "project", "pattern", "pattern_revision", "provider", "workspace", "task", "status",
+              "started", "finished", "session_id", "result", "error", "review")
 
 
 class Tracker:
-    def __init__(self, data, codex, claude, demo=False):
+    def __init__(self, data, codex, claude, demo=False, runner=None):
         self.path = data
         self.codex = codex
         self.claude = claude
         self.cache = {}
         self.lock = threading.RLock()
         self.demo = demo
+        self.runner = runner or Runner()
+        self.worker = None
         self.projects = []
         self.overrides = {}
+        self.runs = []
         if data.exists():
             try:
                 state = json.loads(data.read_text(encoding="utf-8"))
                 self.projects, self.overrides = state["projects"], state["overrides"]
+                self.runs = state.get("runs", [])
                 if (not isinstance(self.projects, list) or not isinstance(self.overrides, dict)
+                        or not isinstance(self.runs, list)
+                        or any(not isinstance(run, dict) or not set(RUN_FIELDS).issubset(run)
+                               or not {"digest", "checkpoint"} <= run.keys() for run in self.runs)
                         or any(value is not None and not isinstance(value, str) for value in self.overrides.values())):
                     raise ValueError("Invalid project store")
                 for project in self.projects:
@@ -57,6 +69,13 @@ class Tracker:
         self.rows = []
         self.sources = {}
         self.scanned = 0
+        if any(run["status"] == "running" for run in self.runs):
+            recovered = [
+                {**run, "status": "interrupted", "error": "Threadline stopped before recording a result.",
+                 "finished": int(time.time())} if run["status"] == "running" else run
+                for run in self.runs
+            ]
+            self.save(self.projects, self.overrides, recovered)
 
     def refresh(self):
         if self.demo:
@@ -85,6 +104,7 @@ class Tracker:
                              "in_production": project.get("in_production", False),
                              "revisit_later": project.get("revisit_later", False),
                              "revisit_on": project.get("revisit_on"),
+                             "workspaces": sorted(set(project["roots"]) | {row["workspace"] for row in linked if row["workspace"]}),
                              "sessions": [row["key"] for row in linked],
                              "decisions": decisions,
                              "evals": [eval_summary(case) for case in project.get("evals", [])],
@@ -92,20 +112,109 @@ class Tracker:
         projects.sort(key=lambda p: p["updated"], reverse=True)
         return {"projects": projects, "sessions": rows, "sources": self.sources,
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
-                "demo": self.demo}
+                "demo": self.demo, "patterns": PATTERNS, "runner": self.runner.options(),
+                "outbox": [{key: run[key] for key in RUN_FIELDS} for run in reversed(self.runs)]}
 
-    def save(self, projects, overrides):
+    def save(self, projects, overrides, runs=None):
+        runs = self.runs if runs is None else runs
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=self.path.parent, prefix=".threadline-")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump({"projects": projects, "overrides": overrides}, stream, ensure_ascii=False, indent=2)
+                json.dump({"projects": projects, "overrides": overrides, "runs": runs}, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(name, self.path)
         finally:
             Path(name).unlink(missing_ok=True)
-        self.projects, self.overrides = projects, overrides
+        self.projects, self.overrides, self.runs = projects, overrides, runs
+
+    def preview(self, data):
+        project = next((p for p in self.projects if p["id"] == data.get("project")), None)
+        if project is None:
+            raise ValueError("Choose a project.")
+        if self.scanned == 0:
+            self.refresh()
+        linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
+        return preview_kickoff(project, linked[project["id"]], data, self.runner.options())
+
+    def launch(self, data):
+        request_id = data.get("request_id")
+        if not isinstance(request_id, str) or len(request_id) != 32 or any(c not in "0123456789abcdef" for c in request_id):
+            raise ValueError("Preview the kickoff before starting a session.")
+        previous = next((run for run in self.runs if run["id"] == request_id), None)
+        if previous:
+            if previous["digest"] != data.get("digest"):
+                raise ValueError("Preview again to start a different session.")
+            return self.snapshot()
+        preview = self.preview(data)
+        if not preview["provider"] or preview["digest"] != data.get("digest"):
+            raise ValueError("Preview the kickoff again before starting the session.")
+        if self.runner.stop.is_set() or any(run["status"] == "running" for run in self.runs):
+            raise ValueError("A session is already running or Threadline is shutting down.")
+        run = {**preview, "id": request_id, "status": "running", "started": int(time.time()),
+               "finished": None, "session_id": None, "result": None, "error": "", "review": {}}
+        self.save(self.projects, self.overrides, [*self.runs, run])
+        self.worker = threading.Thread(target=self.finish_launch, args=(run,), name="threadline-runner")
+        try:
+            self.worker.start()
+        except RuntimeError:
+            self.worker = None
+            failed = {**run, "status": "failed", "finished": int(time.time()), "error": "Could not start the worker."}
+            self.save(self.projects, self.overrides, [*self.runs[:-1], failed])
+        return self.snapshot()
+
+    def finish_launch(self, run):
+        try:
+            session_id, result = self.runner.run(run)
+            completed = {**run, "status": "completed", "session_id": session_id, "result": result,
+                         "review": {key: "pending" for key in ("checkpoint", "decision") if result[key]}}
+        except RunError as error:
+            completed = {**run, "status": "failed", "error": str(error)}
+        except OSError:
+            completed = {**run, "status": "failed", "error": "Could not run the configured CLI in that workspace."}
+        except (ValueError, KeyError, TypeError):
+            completed = {**run, "status": "failed", "error": "The runner response did not match the Outbox result format."}
+        completed["finished"] = int(time.time())
+        with self.lock:
+            runs = [completed if item["id"] == run["id"] else item for item in self.runs]
+            overrides = self.overrides.copy()
+            if completed["session_id"]:
+                overrides.setdefault(f"{run['provider']}:{completed['session_id']}", run["project"])
+                self.scanned = 0
+            try:
+                self.save(self.projects, overrides, runs)
+            except OSError:
+                completed["error"] = "Could not save the result. It remains available until Threadline stops."
+                self.runs, self.overrides = runs, overrides
+
+    def review(self, data):
+        run = next((item for item in self.runs if item["id"] == data.get("run")), None)
+        key, action = data.get("proposal"), data.get("action")
+        if run is None or key not in ("checkpoint", "decision") or action not in ("accept", "dismiss"):
+            raise ValueError("Choose an Outbox proposal and review action.")
+        if run["review"].get(key) != "pending":
+            return self.snapshot()
+        projects = list(self.projects)
+        if action == "accept":
+            previous = next((p for p in projects if p["id"] == run["project"]), None)
+            if previous is None:
+                raise ValueError("Project no longer exists.")
+            proposal = run["result"][key]
+            source = f"{proposal['source']} · {PROVIDERS[run['provider']]} session {run['session_id']}"
+            if key == "checkpoint":
+                if checkpoint_fields(previous) != run["checkpoint"]:
+                    raise ValueError("The checkpoint changed after launch. Review the proposal and update the project manually.")
+                project = {**previous, "summary": proposal["summary"], "next": proposal["next"], "evidence": source,
+                           "checkpoint": date.today().isoformat()}
+            else:
+                decisions = previous.get("decisions", [])
+                project = {**previous, "decisions": [*decisions, new_decision({**proposal, "source": source}, decisions, {})]}
+            projects[projects.index(previous)] = project
+        state = "accepted" if action == "accept" else "dismissed"
+        reviewed = {**run, "review": {**run["review"], key: state}}
+        self.save(projects, self.overrides, [reviewed if item["id"] == run["id"] else item for item in self.runs])
+        return self.snapshot()
 
     def change(self, path, data):
         project_ids = {p["id"] for p in self.projects}
@@ -234,7 +343,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "Use the dashboard from an allowed client to make changes."})
             return
         path = self.path.partition("?")[0]
-        if path not in ("/api/project", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay"):
+        if path not in ("/api/project", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
+                        "/api/kickoff", "/api/launch", "/api/review"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -248,6 +358,13 @@ class Handler(BaseHTTPRequestHandler):
             with tracker.lock:
                 if path == "/api/refresh":
                     result = tracker.snapshot(refresh=True)
+                elif path == "/api/kickoff":
+                    preview = tracker.preview(data)
+                    result = {"brief": preview["brief"], "digest": preview["digest"], "request_id": uuid4().hex}
+                elif path == "/api/launch":
+                    result = tracker.launch(data)
+                elif path == "/api/review":
+                    result = tracker.review(data)
                 else:
                     tracker.snapshot()
                     result = tracker.change(path, data)
@@ -272,6 +389,10 @@ def main():
     parser.add_argument("--codex-dir", type=Path, default=Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex"))
     parser.add_argument("--claude-dir", type=Path, default=Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude"))
     parser.add_argument("--demo", action="store_true", help="Try synthetic sessions in a temporary workspace")
+    parser.add_argument("--runner", action="append", choices=PROVIDERS, default=[],
+                        help="Enable read-only launches with this installed CLI. Repeat for additional providers.")
+    parser.add_argument("--runner-workspace", action="append", type=Path, default=[],
+                        help="Permit launches from this directory. Repeat for additional workspaces.")
     args = parser.parse_args()
     if args.bind.is_unspecified or args.bind.is_multicast or args.bind == IPv4Address("255.255.255.255"):
         parser.error("--bind requires a single interface address.")
@@ -279,6 +400,8 @@ def main():
         parser.error("A non-loopback --bind requires at least one --allow-from address.")
     if not 0 <= args.port <= 65535:
         parser.error("--port must be between 0 and 65535.")
+    if args.demo and args.runner:
+        parser.error("Session launch requires a non-demo register.")
     if not all(WEB.joinpath(name).is_file() for name, _ in ASSETS.values()):
         parser.exit(1, "Build the frontend first with npm --prefix frontend run build.\n")
     with ExitStack() as stack:
@@ -286,14 +409,24 @@ def main():
         if args.demo:
             data = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="threadline-demo-"))) / "state.json"
         try:
+            runner = Runner(args.runner, args.runner_workspace)
             server = stack.enter_context(ThreadingHTTPServer((str(args.bind), args.port), Handler))
-            server.tracker = Tracker(data, args.codex_dir.expanduser().resolve(), args.claude_dir.expanduser().resolve(), args.demo)
+            server.tracker = Tracker(data, args.codex_dir.expanduser().resolve(), args.claude_dir.expanduser().resolve(),
+                                     args.demo, runner)
         except (OSError, ValueError) as error:
             parser.exit(1, f"Threadline: {error}\n")
         server.daemon_threads = False
         server.allowed_clients = {str(address) for address in [args.bind, *args.allow_from]}
         print(f"Threadline → http://{args.bind}:{server.server_port}", flush=True)
+        def interrupt(*_args):
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, interrupt)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
+        finally:
+            runner.stop.set()
+            if server.tracker.worker:
+                server.tracker.worker.join()

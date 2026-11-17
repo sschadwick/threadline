@@ -16,10 +16,11 @@ interface Props extends SessionActions {
   initialProject?: string;
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
+  onKickoff: (project: string) => void;
   onApply: ApplyDashboardChange;
 }
 
-export function ProjectRegister({ data, revisit, initialFilter, initialProject, onEdit, onCopy, onApply, onLink, onResume }: Props) {
+export function ProjectRegister({ data, revisit, initialFilter, initialProject, onEdit, onCopy, onKickoff, onApply, onLink, onResume }: Props) {
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState("recent");
   const [filter, setFilter] = useState(initialFilter || "All projects");
@@ -80,7 +81,7 @@ export function ProjectRegister({ data, revisit, initialFilter, initialProject, 
       </ListPanel>
       <aside id="detail" className="panel detail" aria-label="Project details">
         {selected ? <ProjectDetails key={selected.id} project={selected} sessions={selectedSessions}
-          onEdit={onEdit} onCopy={onCopy} onApply={onApply} onLink={onLink} onResume={onResume} /> :
+          onEdit={onEdit} onCopy={onCopy} onKickoff={onKickoff} onApply={onApply} onLink={onLink} onResume={onResume} /> :
           <div className="empty">Select a project to view its checkpoint.</div>}
       </aside>
     </div>

@@ -22,10 +22,11 @@ interface Props extends SessionActions {
   sessions: Session[];
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
+  onKickoff: (project: string) => void;
   onApply: ApplyDashboardChange;
 }
 
-export function ProjectDetails({ project, sessions, onEdit, onCopy, onApply, onLink, onResume }: Props) {
+export function ProjectDetails({ project, sessions, onEdit, onCopy, onKickoff, onApply, onLink, onResume }: Props) {
   const [showAll, setShowAll] = useState(false);
   const displayed = showAll ? sessions : sessions.slice(0, 4);
 
@@ -52,6 +53,9 @@ export function ProjectDetails({ project, sessions, onEdit, onCopy, onApply, onL
       <button type="button" className="button copy-brief" id="copy-brief"
         onClick={() => onCopy(project.kickoff, "Continuation brief copied")}>
         <span aria-hidden="true">⧉</span> Copy continuation brief
+      </button>
+      <button type="button" className="button secondary copy-brief" onClick={() => onKickoff(project.id)}>
+        Prepare kickoff
       </button>
       <DecisionPanel project={project} sessions={sessions} onApply={onApply} />
       <div className="session-title"><h3>Linked sessions</h3><span>{sessions.length}</span></div>

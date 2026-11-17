@@ -3,6 +3,8 @@ import { api } from "./api";
 import { resumeCommand } from "./continuation";
 import { CopyDialog, LinkEditor, ProjectEditor } from "./Dialogs";
 import type { Project, ProjectContext, Session } from "./model";
+import { Outbox } from "./Outbox";
+import { PatternLibrary } from "./PatternLibrary";
 import { ProjectMetrics } from "./ProjectMetrics";
 import { ProjectRegister } from "./ProjectRegister";
 import { SessionInbox } from "./SessionInbox";
@@ -59,12 +61,17 @@ export function App() {
     {loadError && <div className="data-note" role="alert">Could not read session history. {loadError}</div>}
     {data ? <>
       {navigation.view === "projects" && <ProjectMetrics data={data} onNavigate={navigate} />}
-      {navigation.view === "inbox" ?
+      {navigation.view === "inbox" &&
         <SessionInbox key={navigation.revision} data={data} initialFilter={navigation.filter}
-          onTrack={trackProject} {...sessionActions} /> :
+          onTrack={trackProject} {...sessionActions} />}
+      {(navigation.view === "projects" || navigation.view === "revisit") &&
         <ProjectRegister key={navigation.revision} data={data} revisit={navigation.view === "revisit"}
           initialFilter={navigation.filter} initialProject={navigation.project}
-          onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply} {...sessionActions} />}
+          onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply}
+          onKickoff={(project) => navigate("patterns", undefined, project)} {...sessionActions} />}
+      {navigation.view === "patterns" && <PatternLibrary key={navigation.revision} data={data} project={navigation.project}
+        onApply={apply} onCopy={copy} onLaunch={() => navigate("outbox")} />}
+      {navigation.view === "outbox" && <Outbox data={data} onApply={apply} onCopy={copy} />}
       {editor?.kind === "project" &&
         <ProjectEditor project={editor.project} context={editor.context} statuses={data.statuses}
           onClose={closeEditor} onSave={async (draft) => {

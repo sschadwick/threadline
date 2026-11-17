@@ -68,9 +68,60 @@ export interface Project extends ProjectFields, ProjectLabels {
   revisit: boolean;
   revisit_state: "later" | "due" | "inactive" | null;
   sessions: string[];
+  workspaces: string[];
   decisions: Decision[];
   evals: KickoffEval[];
   kickoff: string;
+}
+
+export interface Pattern {
+  id: string;
+  revision: number;
+  title: string;
+  summary: string;
+  roles: string[];
+  steps: string[];
+  stop: string;
+  source?: string;
+}
+
+export interface KickoffDraft {
+  project: string;
+  pattern: string;
+  task: string;
+  criteria: string;
+  workspace: string;
+  provider: SessionSource | "";
+}
+
+export interface KickoffPreview {
+  brief: string;
+  digest: string;
+  request_id: string;
+}
+
+export type Proposal = "checkpoint" | "decision";
+export type ReviewAction = "accept" | "dismiss";
+
+export interface OutboxRun {
+  id: string;
+  project: string;
+  pattern: string;
+  pattern_revision: number;
+  provider: SessionSource;
+  workspace: string;
+  task: string;
+  status: "running" | "completed" | "failed" | "interrupted";
+  started: number;
+  finished: number | null;
+  session_id: string | null;
+  result: {
+    summary: string;
+    checkpoint: { summary: string; next: string; source: string } | null;
+    decision: { choice: string; rationale: string; source: string } | null;
+  } | null;
+  error: string;
+  review: Partial<Record<Proposal, "pending" | "accepted" | "dismissed">>;
 }
 
 export interface WorkspaceSuggestion {
@@ -88,6 +139,9 @@ export interface DashboardState {
   sources: Record<SessionSource, { count: number; note: string }>;
   scanned: number;
   demo: boolean;
+  patterns: Pattern[];
+  runner: { providers: SessionSource[]; workspaces: string[] };
+  outbox: OutboxRun[];
   savedProject?: string;
 }
 
