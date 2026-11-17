@@ -42,16 +42,6 @@ The dashboard serves titles, dates, and working directories to your browser. Tra
 
 Back up `~/.local/state/threadline/state.json` to keep project edits and session links. Threadline honors `XDG_STATE_HOME` and supports `--data PATH` for a custom location.
 
-### Open from another machine
-
-Threadline listens on loopback by default. For a private encrypted network such as Tailscale, bind to the server's address and allow the laptop's address. This example uses placeholder tailnet IPs.
-
-```bash
-python3 -m threadline --bind 100.64.0.10 --allow-from 100.64.0.20
-```
-
-Open `http://100.64.0.10:8765` on the allowed laptop. Your network policy must allow that connection. Threadline checks the peer IP and serves plain HTTP, so keep this listener on a trusted encrypted network.
-
 ## Develop
 
 ```bash
