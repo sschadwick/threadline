@@ -1,0 +1,24 @@
+.workflow-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+.workflow-panel { padding: 14px; }
+.workflow-panel h2 { margin-bottom: 12px; }
+.pattern-list, .outbox-list { list-style: none; margin: 0; padding: 0; }
+.pattern-list { display: grid; gap: 5px; }
+.pattern-option { display: grid; gap: 3px; text-align: left; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; width: 100%; }
+.pattern-option span, .pattern-details { color: var(--muted); font-size: 12px; }
+.pattern-option[aria-pressed="true"] { border-color: var(--accent); background: #263122; }
+.pattern-details { padding-top: 12px; }
+.pattern-details :is(ul, ol) { margin: 4px 0 10px; padding-inline-start: 20px; }
+.pattern-details h3, .outbox-title h3 { color: var(--text); font-size: 13px; }
+.pattern-details a { color: var(--accent); }
+.kickoff-form fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 10px; }
+.kickoff-form label, .kickoff-preview label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.kickoff-form textarea, .kickoff-preview textarea { width: 100%; resize: vertical; }
+.kickoff-form button { justify-self: start; }
+.kickoff-preview { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.kickoff-preview textarea { font: 12px/1.45 var(--mono); }
+.workflow-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 8px 4px; }
+.outbox-list > li { border-top: 1px solid var(--line); padding-block: 12px; overflow-wrap: anywhere; }
+.outbox-list p { margin-top: 5px; white-space: pre-line; font-size: 13px; }
+.outbox-title { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.outbox-proposal { margin-top: 8px; border: 1px solid var(--line); padding: 9px; border-radius: 5px; }
+.outbox-proposal h4 { margin: 0; font-size: 13px; }

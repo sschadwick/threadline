@@ -12,19 +12,23 @@ Organize the frontend around what users see and do.
 
 Port the existing screens first. Exercise the demo and a saved register to verify that project edits, session links, filters, and continuation briefs carry over. Then add project labels and reminders.
 
-## Project labels and reminders
+## Project pages, status, and reminders
 
-Keep the existing work status. Add an editable **In production** badge. A project can be in production while active development continues or while work is parked. The badge records a user-confirmed deployment state. The checkpoint and its evidence can record what was verified.
+Each project opens on a dedicated page with a bookmarkable URL. Change its status from the page header. **In production** is a status alongside **In progress**, **Planned**, and the other project stages. Projects with a legacy production badge migrate to **In production** when loaded.
+
+**Archive project** moves the project out of active views and the Revisit queue. The Archive view preserves access to its checkpoint, decisions, and sessions. **Restore project** returns it to the register with its previous status.
 
 **Revisit later** is an explicit follow-up with an optional date. Undated and future follow-ups appear under **Later**. Dated follow-ups move to **Due** on their reminder date. Open projects without a follow-up appear under **Due** after 14 days of inactivity. Parking a project suppresses its inactivity reminder.
 
-Existing records load with an unset production badge and follow-up. Saving the new fields preserves each project's other details and session links.
+Status and archive actions keep the checkpoint date and session links intact.
 
 ## Decision history and kickoff evals
 
 Use **Decisions** to record a choice, its rationale, and its source. A change creates a new revision linked to the decision it supersedes. The timeline retains both revisions and shows which one applies now. The copied continuation brief includes the active revisions and their evidence.
 
-When the Outbox is added, allow sessions to propose decisions for review and record who accepted them.
+The Outbox holds proposed decisions and checkpoints for manual acceptance or dismissal.
+
+Manual launches are the first inbox event. The worker records each outcome in the Outbox, where it can wait for human review across restarts. [Building always-on agents](https://claude.com/resources/articles/building-always-on-agents)
 
 ### Turn a decision into an eval
 
@@ -36,9 +40,9 @@ Once a runner is available, add **Run against a pattern** to test how an agent a
 
 AI zoo references at the pinned revision include `precedent-log.md` for approved decisions, `evidence-bounded-session-checkpoints.md` for source references, and `golden-set-model-regression.md` for replaying fixed cases.
 
-## Agentic Patterns proposal
+## Agentic Patterns
 
-Add **Agentic Patterns** to the sidebar. Each entry describes when to use the pattern, the role assignments, the expected evidence, and the stopping condition. Record a stable ID, a revision, and the source in the curated AI zoo. Bundle the selected definitions with Threadline so a kickoff uses the reviewed version.
+The **Agentic Patterns** catalog describes when to use each workflow, its role assignments, expected evidence, and stopping condition. Built-in definitions have stable IDs and revisions.
 
 | Starter entry | What the kickoff asks for |
 | --- | --- |
@@ -47,14 +51,14 @@ Add **Agentic Patterns** to the sidebar. Each entry describes when to use the pa
 | Producer and independent auditor | A producer creates the artifact. Approved deterministic checks run against its exact revision. A separate, read-only reviewer evaluates that revision against the same acceptance criteria. |
 | MOLT Sinai | Run a consequential change through intake, plan review, implementation, independent review, and a final check of the review evidence. |
 
-Model assignments are presets attached to roles. Claude Code supports explicit subagent model selection. Show the model and role settings the selected runner can support. Surface a model substitution or an unverified assignment in the result. [Claude Code subagent model selection](https://code.claude.com/docs/en/sub-agents#choose-a-model)
+The model assignments describe intended roles in the brief. A host launch uses the configured CLI model for one read-only session. Explicit subagent routing is a future capability.
 
 ### Kick off a project with a pattern
 
-1. Choose **Use in project** on a pattern card and select a project. A project's **Start new session** action can also open the pattern picker.
-2. Preview an editable kickoff with the saved checkpoint, applicable accepted decisions, workspace, task objective, acceptance criteria, and selected role assignments. Show the runner and its permission mode before launch.
-3. **Copy kickoff** copies the brief for a fresh manual session. **Start session** queues the reviewed kickoff for an enrolled runner that supports the selected roles and permissions.
-4. Record the project, checkpoint and decision revisions, pattern revision, requested model settings, and new session ID on the run. Show the outcome and any proposed checkpoint or decision in the Outbox for review.
+1. Choose a pattern and a project, or select **Prepare kickoff** from a project.
+2. Enter the task and acceptance criteria. Preview a brief with the saved checkpoint, active decision revisions, workspace, and roles. For a host launch, choose the provider and an enrolled workspace.
+3. **Copy kickoff** copies the brief for a fresh manual session. **Start session** launches the reviewed brief. The host processes one launch at a time, and retrying the same submission returns the same run.
+4. The run stores the brief, project, checkpoint, decision revisions, pattern revision, provider, workspace, and session ID when the CLI returns it. The Outbox shows the result and any proposed checkpoint or decision for manual review.
 
 A producer receives the approved checks and can report evidence from its own work. The runner owns the check definitions and results. Independent review runs in its own context with read-only artifact access. Record which revision each check or review covered. A new revision requires a fresh check. Human acceptance closes the work.
 
@@ -74,6 +78,6 @@ An escalation handoff carries the current revision, attempts, evidence, and open
 
 ### First release
 
-Start with the curated entries and a project-specific **Copy kickoff** flow. For MOLT Sinai, start with a brief for one case and record each stage as the work proceeds. Verify that the same project checkpoint, task, and pattern revision produce the same kickoff text. Add runner dispatch after that flow is usable. Replaying a launch event should create at most one new session. A runner with unverified role support can offer the copy path and explain which capability is unavailable.
+The first release offers a MOLT Sinai brief and an optional initial read-only session. Later stages run through separate sessions with human review. Tracking stage transitions and enforcing independent review in the app are future work.
 
 AI zoo references at `b7381160ea78aba37cc78e053faa9e5fd2e23d64` include `supervision-ladder.md` for escalation, `who-can-say-no.md` for independent checks, and `lane-ownership-review-binding.md` for review provenance. The `molt-sinai.md` evaluation also covers plan review, test integrity, bounded rework, and readiness checks.
