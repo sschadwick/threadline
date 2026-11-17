@@ -10,7 +10,7 @@ const views: Record<View, { label: string; title: string; description: string; s
   },
   revisit: {
     label: "Revisit", title: "Projects to revisit", symbol: "◷",
-    description: "Open efforts with no recorded activity for at least 14 days.",
+    description: "Scheduled follow-ups and open projects with 14 days of inactivity.",
   },
   inbox: {
     label: "Session inbox", title: "Session inbox", symbol: "▱",

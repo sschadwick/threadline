@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ListPanel } from "./ListPanel";
 import { ProjectDetails, ProjectStatus, statusClass } from "./ProjectDetails";
 import type { SessionActions } from "./SessionCard";
-import { shortDate, type DashboardState, type Project } from "./model";
+import { shortDate, type ApplyDashboardChange, type DashboardState, type Project } from "./model";
 
 function initials(name: string) {
   return (name.match(/[\p{L}\p{N}]+/gu) || [name]).slice(0, 2)
@@ -16,19 +16,23 @@ interface Props extends SessionActions {
   initialProject?: string;
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
+  onApply: ApplyDashboardChange;
 }
 
-export function ProjectRegister({ data, revisit, initialFilter, initialProject, onEdit, onCopy, onLink, onResume }: Props) {
+export function ProjectRegister({ data, revisit, initialFilter, initialProject, onEdit, onCopy, onApply, onLink, onResume }: Props) {
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState("recent");
   const [filter, setFilter] = useState(initialFilter || "All projects");
   const [selectedId, setSelectedId] = useState(initialProject);
-  const candidates = revisit ? data.projects.filter((project) => project.revisit) : data.projects;
-  const filters = ["All projects", ...data.statuses.filter((status) => candidates.some((project) => project.status === status))];
+  const candidates = revisit ? data.projects.filter((project) => project.revisit_state !== null) : data.projects;
+  const filters = revisit ? ["All projects", "Due", "Later"] : ["All projects",
+    ...(candidates.some((project) => project.in_production) ? ["In production"] : []),
+    ...data.statuses.filter((status) => candidates.some((project) => project.status === status)),
+  ];
   const activeFilter = filters.includes(filter) ? filter : "All projects";
   const query = search.trim().toLowerCase();
   const matches = candidates.filter((project) =>
-    (activeFilter === "All projects" || project.status === activeFilter) &&
+    matchesFilter(project, activeFilter) &&
     [project.name, project.area, project.summary, project.next].some((value) => value.toLowerCase().includes(query)),
   );
   if (order === "oldest") matches.reverse();
@@ -40,11 +44,11 @@ export function ProjectRegister({ data, revisit, initialFilter, initialProject, 
     return session ? [session] : [];
   });
   const noMatches = query || activeFilter !== "All projects" ? "No projects match these filters."
-    : revisit ? "No open projects need revisiting." : "Create a project or start from a session in the inbox.";
+    : revisit ? "No projects to revisit." : "Create a project or start from a session in the inbox.";
 
   return <>
     <div className="layout">
-      <ListPanel title={revisit ? "Dormant projects" : "Project register"} count={matches.length}
+      <ListPanel title={revisit ? "Revisit queue" : "Project register"} count={matches.length}
         search={search} searchLabel="Search projects" filters={filters} filter={activeFilter}
         onSearch={setSearch} onFilter={setFilter} controls={
           <select id="sort" aria-label="Project order" value={order} onChange={(event) => setOrder(event.target.value)}>
@@ -76,10 +80,16 @@ export function ProjectRegister({ data, revisit, initialFilter, initialProject, 
       </ListPanel>
       <aside id="detail" className="panel detail" aria-label="Project details">
         {selected ? <ProjectDetails key={selected.id} project={selected} sessions={selectedSessions}
-          onEdit={onEdit} onCopy={onCopy} onLink={onLink} onResume={onResume} /> :
+          onEdit={onEdit} onCopy={onCopy} onApply={onApply} onLink={onLink} onResume={onResume} /> :
           <div className="empty">Select a project to view its checkpoint.</div>}
       </aside>
     </div>
-    <p className="footnote">Revisit flags open projects with no recorded activity for 14 days.</p>
   </>;
+}
+
+function matchesFilter(project: Project, filter: string) {
+  if (filter === "Due") return project.revisit;
+  if (filter === "Later") return project.revisit_state === "later";
+  if (filter === "In production") return project.in_production;
+  return filter === "All projects" || project.status === filter;
 }

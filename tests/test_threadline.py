@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,7 +35,7 @@ class ThreadlineTest(unittest.TestCase):
             "display": "Draft a review schema", "project": str(self.checkout),
             "timestamp": 1794000000000, "sessionId": CLAUDE_ID,
         }) + "\n" + '{"partial"', encoding="utf-8")
-        with sqlite3.connect(self.codex / "state_5.sqlite") as db:
+        with closing(sqlite3.connect(self.codex / "state_5.sqlite")) as db, db:
             db.execute("CREATE TABLE threads (id, title, cwd, updated_at, archived, source)")
             db.executemany("INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?)", [
                 (CODEX_ID, "Compare reviewer output", str(self.checkout), 1794000200, 1, "vscode"),
@@ -82,6 +83,71 @@ class ThreadlineTest(unittest.TestCase):
             project["checkpoint"] = old
         revisit = [p["status"] for p in tracker.snapshot()["projects"] if p["revisit"]]
         self.assertEqual(revisit, ["In progress"])
+
+    def test_production_and_revisit_labels_are_independent(self):
+        tracker = self.tracker()
+        tracker.snapshot()
+        fields = {"name": "Example", "status": "Parked"}
+        created = tracker.change("/api/project", fields)["projects"][0]
+        self.assertFalse(created["in_production"])
+        fields["id"] = created["id"]
+        later = tracker.change("/api/project", {**fields, "in_production": True, "revisit_later": True})
+        self.assertEqual(later["projects"][0]["revisit_state"], "later")
+        tracker.change("/api/project", {**fields, "revisit_on": date.today().isoformat()})
+        project = self.tracker().snapshot()["projects"][0]
+        self.assertEqual(project["status"], "Parked")
+        self.assertTrue(project["in_production"])
+        self.assertEqual(project["revisit_state"], "due")
+        self.assertEqual(project["checkpoint"], created["checkpoint"])
+
+    def test_decision_replay_uses_frozen_revisions_and_evidence(self):
+        self.write_logs()
+        tracker = self.tracker()
+        workspace = tracker.snapshot()["suggestions"][0]
+        project_id = tracker.change("/api/project", {
+            "name": "Example", "status": "Prototype", "sessions": workspace["sessions"],
+        })["savedProject"]
+
+        def decide(**fields):
+            result = tracker.change("/api/decision", {"id": project_id, **fields})
+            return result["projects"][0]["decisions"][-1]
+
+        older = decide(choice="Make Docker the default", rationale="Uniform runtime", source="Initial plan")
+        current = decide(choice="Keep native install as default", rationale="Simpler first run",
+                         source="Packaging decision", source_session=f"claude:{CLAUDE_ID}", supersedes=older["id"])
+        with self.assertRaises(ValueError):
+            decide(choice="Stale edit", rationale="Conflicting update", source="Other", supersedes=older["id"])
+
+        frozen = tracker.change("/api/eval", {
+            "id": project_id, "decision": current["id"], "name": "Packaging", "task": "Update setup commands",
+        })["projects"][0]["evals"][0]
+        latest = decide(choice="Bundle a native installer", rationale="Support unattended setup",
+                        source="Packaging follow-up", supersedes=current["id"])
+        project = tracker.change("/api/replay", {"id": project_id, "case": frozen["id"]})["projects"][0]
+        self.assertIn(latest["choice"], project["kickoff"])
+        self.assertNotIn(current["choice"], project["kickoff"])
+        restored = self.tracker().snapshot()["projects"][0]
+        self.assertEqual(len(restored["decisions"]), 3)
+        result = restored["evals"][0]["last_result"]
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["actual"], [current["id"]])
+        self.assertIn(current["source"], result["brief"])
+        self.assertIn(f"claude:{CLAUDE_ID}", result["brief"])
+        self.assertNotIn(older["choice"], result["brief"])
+        self.assertIn("Update setup commands", result["brief"])
+
+        with patch("threadline.kickoff.render_kickoff", return_value=f"- Decision {older['id']}: {older['choice']}"):
+            replayed = tracker.change("/api/replay", {"id": project_id, "case": frozen["id"]})
+        failed = replayed["projects"][0]["evals"][0]["last_result"]
+        self.assertFalse(failed["passed"])
+        self.assertTrue(all(not assertion["passed"] for assertion in failed["assertions"]))
+
+        changed_source = result["brief"].replace(current["source"], current["source"] + " (unverified)")
+        with patch("threadline.kickoff.render_kickoff", return_value=changed_source):
+            replayed = tracker.change("/api/replay", {"id": project_id, "case": frozen["id"]})
+        failed = replayed["projects"][0]["evals"][0]["last_result"]
+        self.assertFalse(failed["passed"])
+        self.assertEqual([item["passed"] for item in failed["assertions"]], [True, False, True])
 
     def test_demo_uses_synthetic_history(self):
         tracker = Tracker(self.state, self.codex, self.claude, demo=True)

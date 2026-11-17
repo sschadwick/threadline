@@ -36,7 +36,7 @@ export function useDashboard(paused: boolean) {
   useEffect(() => {
     if (paused) return;
     const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh();
+      if (!document.hidden && !document.querySelector("dialog[open]")) void refresh();
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [paused, refresh]);

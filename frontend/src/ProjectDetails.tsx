@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { continuationBrief } from "./continuation";
-import { dateLabel, type Project, type Session } from "./model";
+import { DecisionPanel } from "./DecisionPanel";
+import { dateLabel, type ApplyDashboardChange, type Project, type Session } from "./model";
 import { SessionCard, type SessionActions } from "./SessionCard";
 
 export const statusClass: Record<string, string> = {
@@ -9,9 +9,11 @@ export const statusClass: Record<string, string> = {
 };
 
 export function ProjectStatus({ project }: { project: Project }) {
+  const revisitLabel = project.revisit_state && { later: "Revisit later", due: "Revisit due", inactive: "Revisit" }[project.revisit_state];
   return <>
     <span className={"status " + statusClass[project.status]}><i />{project.status}</span>
-    {project.revisit && <span className="revisit-mark">Revisit</span>}
+    {project.in_production && <span className="production-mark">In production</span>}
+    {revisitLabel && <span className="revisit-mark">{revisitLabel}</span>}
   </>;
 }
 
@@ -20,9 +22,10 @@ interface Props extends SessionActions {
   sessions: Session[];
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
+  onApply: ApplyDashboardChange;
 }
 
-export function ProjectDetails({ project, sessions, onEdit, onCopy, onLink, onResume }: Props) {
+export function ProjectDetails({ project, sessions, onEdit, onCopy, onApply, onLink, onResume }: Props) {
   const [showAll, setShowAll] = useState(false);
   const displayed = showAll ? sessions : sessions.slice(0, 4);
 
@@ -33,7 +36,10 @@ export function ProjectDetails({ project, sessions, onEdit, onCopy, onLink, onRe
     </div>
     <div className="detail-body">
       <h2 id="detail-heading" tabIndex={-1}>{project.name}</h2>
-      <div className="detail-meta"><ProjectStatus project={project} /><span>{project.area || "General"}</span></div>
+      <div className="detail-meta">
+        <ProjectStatus project={project} /><span>{project.area || "General"}</span>
+        {project.revisit_on && <span>Follow-up {dateLabel(project.revisit_on)}</span>}
+      </div>
       <section className="checkpoint">
         <h3>Last checkpoint</h3>
         <p>{project.summary || "No checkpoint recorded."}</p>
@@ -44,9 +50,10 @@ export function ProjectDetails({ project, sessions, onEdit, onCopy, onLink, onRe
         <p>{project.next || "No next action recorded."}</p>
       </section>
       <button type="button" className="button copy-brief" id="copy-brief"
-        onClick={() => onCopy(continuationBrief(project, sessions), "Continuation brief copied")}>
+        onClick={() => onCopy(project.kickoff, "Continuation brief copied")}>
         <span aria-hidden="true">⧉</span> Copy continuation brief
       </button>
+      <DecisionPanel project={project} sessions={sessions} onApply={onApply} />
       <div className="session-title"><h3>Linked sessions</h3><span>{sessions.length}</span></div>
       {displayed.length ? displayed.map((session) =>
         <SessionCard key={session.key} session={session} onLink={onLink} onResume={onResume} />,

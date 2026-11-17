@@ -7,7 +7,7 @@ Build the dashboard with React, TypeScript, and Vite. Keep the Python HTTP API a
 Organize the frontend around what users see and do.
 
 - `ProjectRegister`, `ProjectDetails`, and `ProjectEditor` cover the main dashboard and project editing.
-- `SessionInbox` handles discovering, linking, and unlinking sessions. `RevisitView` handles follow-ups.
+- `SessionInbox` shows session metadata and opens the link editor. The project register also supports a Revisit view.
 - One API client handles HTTP requests. One dashboard hook owns loading, refresh, and persisted edits. Form drafts live inside their editors. Keep continuation-brief formatting as a plain function.
 
 Port the existing screens first. Exercise the demo and a saved register to verify that project edits, session links, filters, and continuation briefs carry over. Then add project labels and reminders.
@@ -16,21 +16,21 @@ Port the existing screens first. Exercise the demo and a saved register to verif
 
 Keep the existing work status. Add an editable **In production** badge. A project can be in production while active development continues or while work is parked. The badge records a user-confirmed deployment state. The checkpoint and its evidence can record what was verified.
 
-**Revisit later** is an explicit follow-up with an optional date. An undated follow-up appears under **Later**. A dated follow-up appears under **Due** on or after that date. The inactivity rule continues to surface open projects after 14 days. Parking a project without a follow-up removes it from inactivity reminders.
+**Revisit later** is an explicit follow-up with an optional date. Undated and future follow-ups appear under **Later**. Dated follow-ups move to **Due** on their reminder date. Open projects without a follow-up appear under **Due** after 14 days of inactivity. Parking a project suppresses its inactivity reminder.
 
 Existing records load with an unset production badge and follow-up. Saving the new fields preserves each project's other details and session links.
 
-## Decision history and evals proposal
+## Decision history and kickoff evals
 
-Add a **Decisions** panel to each project. A decision records the choice, its rationale, the session or artifact that supports it, and who approved it. Users can record a decision directly or accept a draft from the Outbox. A change creates a new revision that links to the decision it supersedes. The timeline displays both revisions and identifies which one applies now.
+Use **Decisions** to record a choice, its rationale, and its source. A change creates a new revision linked to the decision it supersedes. The timeline retains both revisions and shows which one applies now. The copied continuation brief includes the active revisions and their evidence.
 
-Show the applicable accepted decisions in the kickoff preview with links to their evidence. Keep open questions visible as questions. A later session can propose a change through the Outbox for the user to review.
+When the Outbox is added, allow sessions to propose decisions for review and record who accepted them.
 
 ### Turn a decision into an eval
 
-Add **Save as eval** to a decision and **Evals** to the project. The case editor lets the user select a checkpoint and decision snapshot, enter a task, and define what the kickoff should carry forward. Save the expected results as a versioned case. Each evaluation run records the case revision, pattern revision, and result.
+Choose **Save as eval** on an active decision and enter a kickoff task. The case freezes the current checkpoint, recent linked sessions, decision history, and expected decision. Each replay saves its result under that case.
 
-**Replay kickoff** checks that the rendered brief and its source references match the expected decision revisions. The result shows pass or fail per assertion, with the expected revision, the actual revision, and the rendered excerpt. Start with a case where an older session makes Docker the default and a later accepted decision makes Docker optional. The kickoff should show the active decision and link to its source.
+**Replay kickoff** uses the continuation brief formatter and checks that the rendered text includes the expected decision and its source and excludes superseded revisions. The result shows pass or fail per assertion, the expected and rendered revision IDs, and the full brief.
 
 Once a runner is available, add **Run against a pattern** to test how an agent acts on the brief. Use the same frozen case to compare kickoff patterns. Check structured outputs where the expected action is explicit. Let users grade interpretation or tradeoffs against a saved rubric. Save the actual model settings and evidence for each result. Human-reviewed expectations stay fixed during each comparison.
 
