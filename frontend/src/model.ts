@@ -21,8 +21,7 @@ export interface ProjectFields {
   status: string;
 }
 
-interface ProjectLabels {
-  in_production: boolean;
+interface ProjectReminder {
   revisit_later: boolean;
   revisit_on: string | null;
 }
@@ -61,8 +60,9 @@ export interface KickoffEval {
   } | null;
 }
 
-export interface Project extends ProjectFields, ProjectLabels {
+export interface Project extends ProjectFields, ProjectReminder {
   id: string;
+  archived: boolean;
   checkpoint: string;
   updated: number;
   revisit: boolean;
@@ -147,7 +147,9 @@ export interface DashboardState {
 
 export type ApplyDashboardChange = (request: Promise<DashboardState>) => Promise<DashboardState>;
 
-export interface ProjectDraft extends ProjectFields, ProjectLabels {
+export type ProjectStateChange = { status: string } | { archived: boolean };
+
+export interface ProjectDraft extends ProjectFields, ProjectReminder {
   id?: string;
   workspace?: string;
   sessions?: string[];

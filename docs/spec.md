@@ -12,13 +12,15 @@ Organize the frontend around what users see and do.
 
 Port the existing screens first. Exercise the demo and a saved register to verify that project edits, session links, filters, and continuation briefs carry over. Then add project labels and reminders.
 
-## Project labels and reminders
+## Project pages, status, and reminders
 
-Keep the existing work status. Add an editable **In production** badge. A project can be in production while active development continues or while work is parked. The badge records a user-confirmed deployment state. The checkpoint and its evidence can record what was verified.
+Each project opens on a dedicated page with a bookmarkable URL. Change its status from the page header. **In production** is a status alongside **In progress**, **Planned**, and the other project stages. Projects with a legacy production badge migrate to **In production** when loaded.
+
+**Archive project** moves the project out of active views and the Revisit queue. The Archive view preserves access to its checkpoint, decisions, and sessions. **Restore project** returns it to the register with its previous status.
 
 **Revisit later** is an explicit follow-up with an optional date. Undated and future follow-ups appear under **Later**. Dated follow-ups move to **Due** on their reminder date. Open projects without a follow-up appear under **Due** after 14 days of inactivity. Parking a project suppresses its inactivity reminder.
 
-Existing records load with an unset production badge and follow-up. Saving the new fields preserves each project's other details and session links.
+Status and archive actions keep the checkpoint date and session links intact.
 
 ## Decision history and kickoff evals
 

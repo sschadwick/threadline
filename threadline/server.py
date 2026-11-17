@@ -18,12 +18,12 @@ from uuid import uuid4
 from . import __version__
 from .demo import demo_content
 from .history import load_history, organize
-from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_project_labels
+from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
 from .runner import PROVIDERS, RunError, Runner
 
 WEB = files("threadline").joinpath("web")
-STATUSES = ("In progress", "Prototype", "Planned", "Blocked", "Parked", "Completed")
+STATUSES = ("In progress", "In production", "Prototype", "Planned", "Blocked", "Parked", "Completed")
 FIELDS = {"name": 100, "area": 70, "summary": 2400, "next": 800, "evidence": 300}
 ASSETS = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
           "/style.css": ("style.css", "text/css")}
@@ -58,10 +58,13 @@ class Tracker:
                 for project in self.projects:
                     if (any(not isinstance(project[key], str) for key in (*FIELDS, "id"))
                             or project["status"] not in STATUSES
+                            or not isinstance(project.get("archived", False), bool)
                             or any(not isinstance(project[key], list) or any(not isinstance(value, str) for value in project[key])
                                    for key in ("aliases", "roots", "sessions"))):
                         raise ValueError("Invalid project")
                     date.fromisoformat(project["checkpoint"])
+                    if project.pop("in_production", False) is True:
+                        project["status"] = "In production"
             except (ValueError, KeyError, TypeError) as error:
                 raise ValueError(f"Could not read project store at {data}") from error
         elif demo:
@@ -101,7 +104,7 @@ class Tracker:
             fields = {k: project[k] for k in (*FIELDS, "status", "id", "checkpoint")}
             projects.append({**fields, "updated": updated,
                              "revisit": reminder in ("due", "inactive"), "revisit_state": reminder,
-                             "in_production": project.get("in_production", False),
+                             "archived": project.get("archived", False),
                              "revisit_later": project.get("revisit_later", False),
                              "revisit_on": project.get("revisit_on"),
                              "workspaces": sorted(set(project["roots"]) | {row["workspace"] for row in linked if row["workspace"]}),
@@ -133,6 +136,8 @@ class Tracker:
         project = next((p for p in self.projects if p["id"] == data.get("project")), None)
         if project is None:
             raise ValueError("Choose a project.")
+        if project.get("archived"):
+            raise ValueError("Restore this project before preparing a kickoff.")
         if self.scanned == 0:
             self.refresh()
         linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
@@ -231,14 +236,14 @@ class Tracker:
                 if not isinstance(value, str) or len(value) > limit:
                     raise ValueError(f"{field.capitalize()} must be at most {limit} characters.")
                 values[field] = value.strip()
-            status = data.get("status")
+            status = "In production" if data.get("in_production") is True else data.get("status")
             if not values["name"] or status not in STATUSES:
                 raise ValueError("Enter a project name and status.")
             if previous:
                 project = {**previous, **values, "status": status}
-                if any(previous[k] != project[k] for k in (*FIELDS, "status")):
+                if any(previous[k] != project[k] for k in FIELDS):
                     project["checkpoint"] = date.today().isoformat()
-                update_project_labels(project, data)
+                update_revisit(project, data)
                 projects[projects.index(previous)] = project
             else:
                 project_id = uuid4().hex
@@ -254,7 +259,7 @@ class Tracker:
                 project = {**values, "id": project_id, "status": status,
                            "checkpoint": date.today().isoformat(), "aliases": [values["name"]],
                            "roots": [workspace] if workspace else [], "sessions": []}
-                update_project_labels(project, data)
+                update_revisit(project, data)
                 projects.append(project)
                 overrides.update(dict.fromkeys(keys, project_id))
         elif path == "/api/link":
@@ -269,7 +274,15 @@ class Tracker:
             if previous is None:
                 raise ValueError("Project no longer exists.")
             project = dict(previous)
-            self.change_kickoff(project, path, data, known)
+            if path == "/api/project-state":
+                if "status" in data and "archived" not in data and data["status"] in STATUSES:
+                    project["status"] = data["status"]
+                elif "status" not in data and isinstance(data.get("archived"), bool):
+                    project["archived"] = data["archived"]
+                else:
+                    raise ValueError("Choose a project status or archive action.")
+            else:
+                self.change_kickoff(project, path, data, known)
             projects[projects.index(previous)] = project
         self.save(projects, overrides)
         return {**self.snapshot(), "savedProject": project_id}
@@ -343,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "Use the dashboard from an allowed client to make changes."})
             return
         path = self.path.partition("?")[0]
-        if path not in ("/api/project", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
+        if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
                         "/api/kickoff", "/api/launch", "/api/review"):
             self.send_json(404, {"error": "Page not found."})
             return

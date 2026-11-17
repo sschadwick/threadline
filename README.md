@@ -2,7 +2,7 @@
 
 Threadline keeps a project register alongside your Claude Code and Codex history. Open an effort to see the last checkpoint, what to do next, and which sessions to return to.
 
-![Threadline dashboard showing six demo projects and the selected project's checkpoint, next action, and linked sessions](docs/images/dashboard.png)
+![A Threadline project page with its status, checkpoint, next action, and linked sessions](docs/images/dashboard.png)
 
 ## Try the demo
 
@@ -27,7 +27,7 @@ Run the archive without `--demo` or run `python3 -m threadline` from the checkou
 
 ![The session inbox showing unlinked Claude Code and Codex conversations with controls to attach them to projects](docs/images/inbox.png)
 
-Use **In production** to mark deployed projects and **Revisit later** to set an optional follow-up date. **Decisions** records a choice, its rationale, and supporting evidence. Superseded decisions stay in the project history. The continuation brief carries the active choices and their sources.
+Open a project to change its status, including **In production**, or move it to **Archive**. Archived projects keep their history and can be restored. Use **Revisit later** to set an optional follow-up date. **Decisions** records a choice, its rationale, and supporting evidence. Superseded decisions stay in the project history. The continuation brief carries the active choices and their sources.
 
 Choose **Save as eval** on a decision and enter a kickoff task. **Replay kickoff** checks that a brief built from the saved snapshot includes the expected decision and evidence and excludes superseded revisions. The replay runs locally and does not call a model.
 
