@@ -4,3 +4,5 @@ __pycache__/
 .threadline-state.json
 state.json
 dist/
+/frontend/node_modules/
+/threadline/web/

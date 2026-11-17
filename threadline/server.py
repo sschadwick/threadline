@@ -17,6 +17,7 @@ from uuid import uuid4
 from . import __version__
 from .demo import demo_content
 from .history import load_history, organize
+from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_project_labels
 
 WEB = files("threadline").joinpath("web")
 STATUSES = ("In progress", "Prototype", "Planned", "Blocked", "Parked", "Completed")
@@ -76,11 +77,18 @@ class Tracker:
             linked = by_project[project["id"]]
             checkpoint = datetime.fromisoformat(project["checkpoint"]).timestamp()
             updated = max([int(checkpoint), *(s["updated"] for s in linked)])
+            reminder = revisit_state(project, updated, self.scanned)
+            decisions = project.get("decisions", [])
             fields = {k: project[k] for k in (*FIELDS, "status", "id", "checkpoint")}
             projects.append({**fields, "updated": updated,
-                             "revisit": project["status"] not in ("Completed", "Parked")
-                             and self.scanned - updated >= 14 * 86400,
-                             "sessions": [row["key"] for row in linked]})
+                             "revisit": reminder in ("due", "inactive"), "revisit_state": reminder,
+                             "in_production": project.get("in_production", False),
+                             "revisit_later": project.get("revisit_later", False),
+                             "revisit_on": project.get("revisit_on"),
+                             "sessions": [row["key"] for row in linked],
+                             "decisions": decisions,
+                             "evals": [eval_summary(case) for case in project.get("evals", [])],
+                             "kickoff": render_kickoff(project, linked, decisions)})
         projects.sort(key=lambda p: p["updated"], reverse=True)
         return {"projects": projects, "sessions": rows, "sources": self.sources,
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
@@ -121,6 +129,7 @@ class Tracker:
                 project = {**previous, **values, "status": status}
                 if any(previous[k] != project[k] for k in (*FIELDS, "status")):
                     project["checkpoint"] = date.today().isoformat()
+                update_project_labels(project, data)
                 projects[projects.index(previous)] = project
             else:
                 project_id = uuid4().hex
@@ -133,19 +142,46 @@ class Tracker:
                     or any(known[k]["workspace"] != workspace for k in keys)
                 ):
                     raise ValueError("Workspace does not match the selected sessions.")
-                projects.append({**values, "id": project_id, "status": status,
-                                 "checkpoint": date.today().isoformat(), "aliases": [values["name"]],
-                                 "roots": [workspace] if workspace else [], "sessions": []})
+                project = {**values, "id": project_id, "status": status,
+                           "checkpoint": date.today().isoformat(), "aliases": [values["name"]],
+                           "roots": [workspace] if workspace else [], "sessions": []}
+                update_project_labels(project, data)
+                projects.append(project)
                 overrides.update(dict.fromkeys(keys, project_id))
-        else:
+        elif path == "/api/link":
             key = data.get("session")
             if not isinstance(key, str) or key not in known:
                 raise ValueError("Session no longer exists. Refresh the session list.")
             if project_id is not None and (not isinstance(project_id, str) or project_id not in project_ids):
                 raise ValueError("Project no longer exists.")
             overrides[key] = project_id
+        else:
+            previous = next((p for p in projects if p["id"] == project_id), None)
+            if previous is None:
+                raise ValueError("Project no longer exists.")
+            project = dict(previous)
+            self.change_kickoff(project, path, data, known)
+            projects[projects.index(previous)] = project
         self.save(projects, overrides)
         return {**self.snapshot(), "savedProject": project_id}
+
+    def change_kickoff(self, project, path, data, known):
+        decisions = project.get("decisions", [])
+        cases = list(project.get("evals", []))
+        if path == "/api/replay":
+            index = next((i for i, case in enumerate(cases) if case["id"] == data.get("case")), None)
+            if index is None:
+                raise ValueError("Eval case no longer exists.")
+            case = cases[index]
+            cases[index] = {**case, "results": [*case["results"], replay(case)]}
+            project["evals"] = cases
+            return
+        snapshot = next(item for item in self.snapshot()["projects"] if item["id"] == project["id"])
+        linked = {key: known[key] for key in snapshot["sessions"]}
+        if path == "/api/decision":
+            project["decisions"] = [*decisions, new_decision(data, decisions, linked)]
+        else:
+            project["evals"] = [*cases, new_eval(data, project, list(linked.values()), decisions)]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -198,7 +234,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "Use the dashboard from an allowed client to make changes."})
             return
         path = self.path.partition("?")[0]
-        if path not in ("/api/project", "/api/link", "/api/refresh"):
+        if path not in ("/api/project", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -243,6 +279,8 @@ def main():
         parser.error("A non-loopback --bind requires at least one --allow-from address.")
     if not 0 <= args.port <= 65535:
         parser.error("--port must be between 0 and 65535.")
+    if not all(WEB.joinpath(name).is_file() for name, _ in ASSETS.values()):
+        parser.exit(1, "Build the frontend first with npm --prefix frontend run build.\n")
     with ExitStack() as stack:
         data = args.data.expanduser().resolve()
         if args.demo:

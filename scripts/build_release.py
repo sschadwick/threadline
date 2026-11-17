@@ -19,6 +19,8 @@ def include(path):
 
 
 def main():
+    if not all((ROOT / "threadline" / "web" / name).is_file() for name in ASSETS):
+        raise SystemExit("Build the frontend first with npm --prefix frontend run build.")
     version = runpy.run_path(str(ROOT / "threadline" / "__init__.py"))["__version__"]
     out = ROOT / "dist" / f"threadline-{version}.pyz"
     out.parent.mkdir(exist_ok=True)

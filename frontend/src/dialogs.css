@@ -1,0 +1,16 @@
+dialog { color: var(--text); background: var(--panel); border: 1px solid #4c5949; border-radius: 9px; width: min(510px, calc(100% - 28px)); padding: 0; }
+dialog::backdrop { background: #080c09c9; }
+dialog form { display: grid; gap: 12px; padding: 17px; }
+.dialog-head, .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dialog-head h2 { font-size: 20px; }
+.dialog-actions { justify-content: end; }
+dialog label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+dialog :is(input, textarea, select) { width: 100%; font-size: 14px; }
+dialog textarea { resize: vertical; }
+.form-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.form-checks label { display: flex; align-items: center; gap: 7px; min-height: 28px; }
+.form-checks input { width: auto; accent-color: var(--accent); }
+.form-error { font-size: 12px; color: #ffc1b6; }
+.form-error:empty { display: none; }
+#toast { position: fixed; z-index: 2; right: 17px; bottom: 17px; max-width: calc(100% - 34px); background: #2d3c28; border: 1px solid #506747; color: var(--text); padding: 10px 13px; border-radius: 6px; font-size: 13px; box-shadow: 0 5px 16px #0006; }

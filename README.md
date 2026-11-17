@@ -14,7 +14,7 @@ python3 threadline-0.1.0.pyz --demo
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The demo uses six fictional projects and synthetic session metadata. Its edits live in a temporary directory.
 
-From a source checkout, run `python3 -m threadline --demo` for the same experience.
+From a source checkout, [build the frontend](#develop) and run `python3 -m threadline --demo`.
 
 ## Use your own history
 
@@ -26,6 +26,10 @@ Run the archive without `--demo` or run `python3 -m threadline` from the checkou
 4. When you return, copy a resume command for an existing session or a continuation brief for a new one.
 
 ![The session inbox showing unlinked Claude Code and Codex conversations with controls to attach them to projects](docs/images/inbox.png)
+
+Use **In production** to mark deployed projects and **Revisit later** to set an optional follow-up date. **Decisions** records a choice, its rationale, and supporting evidence. Superseded decisions stay in the project history. The continuation brief carries the active choices and their sources.
+
+Choose **Save as eval** on a decision and enter a kickoff task. **Replay kickoff** checks that a brief built from the saved snapshot includes the expected decision and evidence and excludes superseded revisions. The replay runs locally and does not call a model.
 
 Threadline refreshes session activity every minute while the dashboard is visible. After you track a workspace, later sessions can match its checkout path or project name. You decide the status and next action. Manual links and unlinks take priority.
 
@@ -40,15 +44,42 @@ Threadline reads from the host's filesystem. It uses `CLAUDE_CONFIG_DIR` and `CO
 
 The dashboard serves titles, dates, and working directories to your browser. Transcript bodies stay in the source stores. Threadline makes no external requests and requires no model credentials.
 
-Back up `~/.local/state/threadline/state.json` to keep project edits and session links. Threadline honors `XDG_STATE_HOME` and supports `--data PATH` for a custom location.
+Back up `~/.local/state/threadline/state.json` to keep project edits, session links, decisions, and replay cases. Threadline honors `XDG_STATE_HOME` and supports `--data PATH` for a custom location.
+
+## Optional Docker install
+
+Build the image from the checkout and start the demo.
+
+```bash
+docker build --no-cache -t threadline .
+docker run --rm --network host threadline --demo
+```
+
+Open [Threadline](http://127.0.0.1:8765). The container uses host networking so Threadline can bind to loopback. This works on Linux, including rootless Docker Engine 29.5 or later. On Docker Desktop 4.34 or later, enable host networking in Settings.
+
+For your own history, mount directories containing the source records in the table above. Use a named volume for project edits.
+
+```bash
+docker run --rm --network host \
+  --mount type=volume,source=threadline-data,target=/data \
+  --mount "type=bind,source=/path/to/codex-history,target=/history/codex,readonly" \
+  --mount "type=bind,source=/path/to/claude-history,target=/history/claude,readonly" \
+  threadline
+```
+
+Replace the source paths with directories readable by the container user (UID 10001 inside the container). Include only history records. Keep agent credentials outside the mounts.
 
 ## Develop
 
+Use Node 22 or later and Python 3.11 or later to build from source.
+
 ```bash
+npm --prefix frontend ci
+npm --prefix frontend run build
 python3 -m unittest discover -s tests -v
 python3 scripts/build_release.py
 ```
 
-The build writes a Python archive and SHA-256 checksum under `dist/`. Both the application and the build use the Python standard library.
+The Vite build writes the bundled frontend to `threadline/web/`. The release script packages it in a Python archive and writes a SHA-256 checksum under `dist/`. The archive runs with the Python standard library.
 
 [MIT License](LICENSE)
