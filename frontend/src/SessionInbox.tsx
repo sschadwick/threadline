@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ListPanel } from "./ListPanel";
 import { SessionCard, type SessionActions } from "./SessionCard";
 import { sourceNames, type DashboardState, type ProjectContext } from "./model";
+import { sessionStatus, type SessionStatusFilter } from "./sessionStatus";
+import { SessionStatusSelect } from "./SessionStatusFilter";
 
 const filters = ["Unlinked", "Linked", "All sessions", "Workspaces"];
 
@@ -15,10 +17,12 @@ export function SessionInbox({ data, initialFilter, onTrack, onLink, onResume }:
   const [filter, setFilter] = useState(initialFilter || "Unlinked");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(40);
+  const [status, setStatus] = useState<SessionStatusFilter>("all");
   const query = search.trim().toLowerCase();
   const workspaces = data.suggestions.filter((group) => group.workspace.toLowerCase().includes(query));
   const sessions = data.sessions.filter((session) =>
     (filter === "All sessions" || (filter === "Linked" ? session.project : !session.project)) &&
+    (status === "all" || sessionStatus(session) === status) &&
     [session.title, session.cwd, sourceNames[session.source]].some((text) => text.toLowerCase().includes(query)),
   );
   const browsingWorkspaces = filter === "Workspaces";
@@ -30,6 +34,8 @@ export function SessionInbox({ data, initialFilter, onTrack, onLink, onResume }:
   return <div className="layout single">
     <ListPanel title="Local sessions" count={count} search={search} searchLabel="Search sessions" filters={filters}
       filter={filter} onSearch={(value) => { setSearch(value); setLimit(40); }}
+      controls={!browsingWorkspaces && <SessionStatusSelect value={status}
+        onChange={(value) => { setStatus(value); setLimit(40); }} />}
       onFilter={(value) => { setFilter(value); setLimit(40); }}>
       {count === 0 ? <div className="empty">{emptyMessage}</div> : <div className="inbox-list">
         {browsingWorkspaces ? workspaces.map((group) =>

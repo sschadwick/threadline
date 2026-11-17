@@ -1,4 +1,5 @@
 export type SessionSource = "claude" | "codex";
+export type SessionActivity = "working" | "needs_input" | "idle" | "saved" | "unknown";
 
 export interface Session {
   key: string;
@@ -7,7 +8,8 @@ export interface Session {
   title: string;
   cwd: string;
   updated: number;
-  archived: boolean;
+  archived: boolean | null;
+  activity: SessionActivity;
   workspace: string;
   project: string | null;
 }
@@ -63,6 +65,7 @@ export interface KickoffEval {
 export interface Project extends ProjectFields, ProjectReminder {
   id: string;
   archived: boolean;
+  continuation_session: string | null;
   checkpoint: string;
   updated: number;
   revisit: boolean;
@@ -121,6 +124,7 @@ export interface OutboxRun {
     decision: { choice: string; rationale: string; source: string } | null;
   } | null;
   error: string;
+  acknowledged: boolean;
   review: Partial<Record<Proposal, "pending" | "accepted" | "dismissed">>;
 }
 

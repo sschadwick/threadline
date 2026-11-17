@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { ContinueProject } from "./ContinueProject";
 import { DecisionPanel } from "./DecisionPanel";
-import { dateLabel, errorText, type ApplyDashboardChange, type Project, type ProjectStateChange, type Session } from "./model";
+import { LinkedSessions } from "./LinkedSessions";
+import { dateLabel, errorText, type ApplyDashboardChange, type DashboardState, type Project, type Session } from "./model";
+import { attentionHref } from "./navigation";
 import { RevisitMark } from "./ProjectStatus";
-import { SessionCard, type SessionActions } from "./SessionCard";
+import type { SessionActions } from "./SessionCard";
 
 interface Props extends SessionActions {
   project: Project;
   sessions: Session[];
   statuses: string[];
+  needsAttention: number;
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
   onKickoff: (project: string) => void;
@@ -16,12 +20,12 @@ interface Props extends SessionActions {
   onNotify: (message: string) => void;
 }
 
-export function ProjectDetails({ project, sessions, statuses, onEdit, onCopy, onKickoff, onApply, onNotify, onLink, onResume }: Props) {
-  const [showAll, setShowAll] = useState(false);
+export function ProjectDetails({ project, sessions, statuses, needsAttention,
+  onEdit, onCopy, onKickoff, onApply, onNotify, onLink, onResume }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
-  const displayed = showAll ? sessions : sessions.slice(0, 4);
+  const pinned = sessions.find((session) => session.key === project.continuation_session);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -33,11 +37,11 @@ export function ProjectDetails({ project, sessions, statuses, onEdit, onCopy, on
     return () => { document.title = "Threadline"; };
   }, [project.name]);
 
-  async function changeProject(change: ProjectStateChange, message: string) {
+  async function changeProject(request: Promise<DashboardState>, message: string) {
     setError("");
     setSaving(true);
     try {
-      await onApply(api.setProjectState(project.id, change));
+      await onApply(request);
       onNotify(message);
     } catch (failure) {
       setError(errorText(failure));
@@ -58,16 +62,17 @@ export function ProjectDetails({ project, sessions, statuses, onEdit, onCopy, on
           {project.archived && <strong>Archived project</strong>}
           <RevisitMark project={project} />
           {!project.archived && project.revisit_on && <span>Follow-up {dateLabel(project.revisit_on)}</span>}
+          {needsAttention > 0 && <a href={attentionHref(project.id)}>Needs attention ({needsAttention})</a>}
         </div>
       </div>
       <div className="project-controls">
         <label>Status <select value={project.status} disabled={saving} onChange={(event) =>
-          void changeProject({ status: event.target.value }, "Status updated")}>
+          void changeProject(api.setProjectState(project.id, { status: event.target.value }), "Status updated")}>
           {statuses.map((status) => <option key={status}>{status}</option>)}
         </select></label>
         <button type="button" className="button secondary" id="edit" disabled={saving} onClick={() => onEdit(project)}>Edit details</button>
         <button type="button" className="button secondary" disabled={saving} onClick={() => void changeProject(
-          { archived: !project.archived }, project.archived ? "Project restored" : "Project archived",
+          api.setProjectState(project.id, { archived: !project.archived }), project.archived ? "Project restored" : "Project archived",
         )}>{project.archived ? "Restore project" : "Archive project"}</button>
       </div>
     </header>
@@ -83,26 +88,12 @@ export function ProjectDetails({ project, sessions, statuses, onEdit, onCopy, on
           <h2>Next action</h2>
           <p>{project.next || "No next action recorded."}</p>
         </section>
-        <div className="project-actions">
-          <button type="button" className="button secondary" id="copy-brief"
-            onClick={() => onCopy(project.kickoff, "Continuation brief copied")}>
-            Copy continuation brief
-          </button>
-          {!project.archived && <button type="button" className="button primary" onClick={() => onKickoff(project.id)}>
-            Prepare kickoff
-          </button>}
-        </div>
+        <ContinueProject project={project} pinned={pinned} onCopy={onCopy} onResume={onResume} onKickoff={onKickoff} />
         <DecisionPanel project={project} sessions={sessions} onApply={onApply} />
       </div>
-      <section className="panel detail-body" aria-labelledby="linked-sessions-heading">
-        <div className="session-title"><h2 id="linked-sessions-heading">Linked sessions</h2><span>{sessions.length}</span></div>
-        {displayed.length ? displayed.map((session) =>
-          <SessionCard key={session.key} session={session} onLink={onLink} onResume={onResume} />,
-        ) : <p className="muted small">Find a conversation in the session inbox and link it here.</p>}
-        {sessions.length > 4 && <button type="button" className="button text-button" onClick={() => setShowAll(!showAll)}>
-          {showAll ? "Show fewer sessions" : "Show all " + sessions.length + " sessions"}
-        </button>}
-      </section>
+      <LinkedSessions sessions={sessions} pinned={pinned} saving={saving} onPin={(key) => void changeProject(
+        api.setContinuation(project.id, key), key ? "Continuation session pinned" : "Continuation session unpinned",
+      )} onLink={onLink} onResume={onResume} />
     </div>
   </article>;
 }

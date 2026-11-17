@@ -28,6 +28,7 @@
 @media (max-width: 460px) {
   .list-head { align-items: start; flex-direction: column; }
   .list-actions, .search { width: 100%; }
+  .list-actions { flex-wrap: wrap; }
   select#sort { flex: 0 0 90px; }
   .table-head, .project-row { grid-template-columns: minmax(0, 1fr) 86px 7px; gap: 6px; }
   .table-head > span:nth-child(3), .row-date { display: none; }

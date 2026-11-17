@@ -29,6 +29,10 @@ Run the archive without `--demo` or run `python3 -m threadline` from the checkou
 
 Open a project to change its status, including **In production**, or move it to **Archive**. Archived projects keep their history and can be restored. Use **Revisit later** to set an optional follow-up date. **Decisions** records a choice, its rationale, and supporting evidence. Superseded decisions stay in the project history. The continuation brief carries the active choices and their sources.
 
+Filter **Linked sessions** by status and pin the session you want to resume under **Continue project**. **Needs attention** groups linked sessions waiting for input, failed runs, and proposals ready for review by project.
+
+Threadline reads live Claude Code status from `claude agents --json --all` when the CLI is available. Use `--codex-socket /path/to/socket` to read live state from an existing local Codex App Server. That socket provides the status of sessions loaded by that server. The saved Codex history provides archive state. Claude Code archive state depends on the client that manages the session, and Threadline displays the live or saved status it can verify. [Claude Code Agent View](https://code.claude.com/docs/en/agent-view#list-sessions-as-json) · [Codex App Server](https://learn.chatgpt.com/docs/app-server#threads)
+
 Choose **Save as eval** on a decision and enter a kickoff task. **Replay kickoff** checks that a brief built from the saved snapshot includes the expected decision and evidence and excludes superseded revisions. The replay runs locally and does not call a model.
 
 ## Kick off a session

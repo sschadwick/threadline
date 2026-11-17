@@ -73,7 +73,7 @@ def recent_records(path):
                 yield item
 
 
-def session(source, identity, label="", cwd="", when=0, archived=False):
+def session(source, identity, label="", cwd="", when=0, archived=None):
     return {
         "key": f"{source}:{identity}",
         "source": source,
@@ -81,7 +81,8 @@ def session(source, identity, label="", cwd="", when=0, archived=False):
         "title": label or "Untitled session",
         "cwd": cwd if isinstance(cwd, str) else "",
         "updated": when,
-        "archived": bool(archived),
+        "archived": None if archived is None else bool(archived),
+        "activity": "unknown",
         "workspace": "",
     }
 

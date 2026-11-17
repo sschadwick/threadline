@@ -16,6 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import __version__
+from .activity import read_activity
 from .demo import demo_content
 from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
@@ -32,13 +33,15 @@ RUN_FIELDS = ("id", "project", "pattern", "pattern_revision", "provider", "works
 
 
 class Tracker:
-    def __init__(self, data, codex, claude, demo=False, runner=None):
+    def __init__(self, data, codex, claude, demo=False, runner=None, *, live_activity=False, codex_socket=None):
         self.path = data
         self.codex = codex
         self.claude = claude
         self.cache = {}
         self.lock = threading.RLock()
         self.demo = demo
+        self.live_activity = live_activity
+        self.codex_socket = codex_socket
         self.runner = runner or Runner()
         self.worker = None
         self.projects = []
@@ -59,6 +62,7 @@ class Tracker:
                     if (any(not isinstance(project[key], str) for key in (*FIELDS, "id"))
                             or project["status"] not in STATUSES
                             or not isinstance(project.get("archived", False), bool)
+                            or not isinstance(project.get("continuation_session"), (str, type(None)))
                             or any(not isinstance(project[key], list) or any(not isinstance(value, str) for value in project[key])
                                    for key in ("aliases", "roots", "sessions"))):
                         raise ValueError("Invalid project")
@@ -83,10 +87,13 @@ class Tracker:
     def refresh(self):
         if self.demo:
             _, self.rows = demo_content()
-            self.sources = {source: {"count": sum(row["source"] == source for row in self.rows), "note": ""}
+            self.sources = {source: {"count": sum(row["source"] == source for row in self.rows), "note": "",
+                                     "activity_available": True}
                             for source in ("codex", "claude")}
         else:
             self.rows, self.sources = load_history(self.codex, self.claude, self.cache)
+            if self.live_activity:
+                read_activity(self.rows, self.sources, self.claude, self.codex_socket)
         self.scanned = int(time.time())
 
     def snapshot(self, refresh=False):
@@ -97,6 +104,7 @@ class Tracker:
         projects = []
         for project in self.projects:
             linked = by_project[project["id"]]
+            pin = project.get("continuation_session")
             checkpoint = datetime.fromisoformat(project["checkpoint"]).timestamp()
             updated = max([int(checkpoint), *(s["updated"] for s in linked)])
             reminder = revisit_state(project, updated, self.scanned)
@@ -105,6 +113,7 @@ class Tracker:
             projects.append({**fields, "updated": updated,
                              "revisit": reminder in ("due", "inactive"), "revisit_state": reminder,
                              "archived": project.get("archived", False),
+                             "continuation_session": pin if any(row["key"] == pin for row in linked) else None,
                              "revisit_later": project.get("revisit_later", False),
                              "revisit_on": project.get("revisit_on"),
                              "workspaces": sorted(set(project["roots"]) | {row["workspace"] for row in linked if row["workspace"]}),
@@ -116,7 +125,8 @@ class Tracker:
         return {"projects": projects, "sessions": rows, "sources": self.sources,
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
                 "demo": self.demo, "patterns": PATTERNS, "runner": self.runner.options(),
-                "outbox": [{key: run[key] for key in RUN_FIELDS} for run in reversed(self.runs)]}
+                "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False)}
+                           for run in reversed(self.runs)]}
 
     def save(self, projects, overrides, runs=None):
         runs = self.runs if runs is None else runs
@@ -221,6 +231,15 @@ class Tracker:
         self.save(projects, self.overrides, [reviewed if item["id"] == run["id"] else item for item in self.runs])
         return self.snapshot()
 
+    def acknowledge(self, data):
+        run = next((item for item in self.runs if item["id"] == data.get("run")), None)
+        if run is None or run["status"] not in ("failed", "interrupted"):
+            raise ValueError("Choose a failed or interrupted run.")
+        if not run.get("acknowledged"):
+            runs = [{**item, "acknowledged": True} if item["id"] == run["id"] else item for item in self.runs]
+            self.save(self.projects, self.overrides, runs)
+        return self.snapshot()
+
     def change(self, path, data):
         project_ids = {p["id"] for p in self.projects}
         known = {s["key"]: s for s in self.rows}
@@ -281,9 +300,24 @@ class Tracker:
                     project["archived"] = data["archived"]
                 else:
                     raise ValueError("Choose a project status or archive action.")
+            elif path == "/api/project-pin":
+                if "session" not in data:
+                    raise ValueError("Choose a session or clear the pin.")
+                key = data.get("session")
+                if key is not None:
+                    if not isinstance(key, str) or key not in known:
+                        raise ValueError("Choose a session linked to the project.")
+                    linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
+                    if not any(session["key"] == key for session in linked[project_id]):
+                        raise ValueError("Choose a session linked to the project.")
+                project["continuation_session"] = key
             else:
                 self.change_kickoff(project, path, data, known)
             projects[projects.index(previous)] = project
+        for index, project in enumerate(projects):
+            pinned = project.get("continuation_session")
+            if pinned in overrides and overrides[pinned] != project["id"]:
+                projects[index] = {**project, "continuation_session": None}
         self.save(projects, overrides)
         return {**self.snapshot(), "savedProject": project_id}
 
@@ -357,7 +391,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = self.path.partition("?")[0]
         if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
-                        "/api/kickoff", "/api/launch", "/api/review"):
+                        "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -378,6 +412,8 @@ class Handler(BaseHTTPRequestHandler):
                     result = tracker.launch(data)
                 elif path == "/api/review":
                     result = tracker.review(data)
+                elif path == "/api/run-acknowledge":
+                    result = tracker.acknowledge(data)
                 else:
                     tracker.snapshot()
                     result = tracker.change(path, data)
@@ -400,6 +436,7 @@ def main():
     parser.add_argument("--data", type=Path, default=state_dir / "threadline" / "state.json",
                         help="Change where Threadline saves its project register")
     parser.add_argument("--codex-dir", type=Path, default=Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex"))
+    parser.add_argument("--codex-socket", type=Path, help="Read live state from an existing local Codex App Server socket.")
     parser.add_argument("--claude-dir", type=Path, default=Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude"))
     parser.add_argument("--demo", action="store_true", help="Try synthetic sessions in a temporary workspace")
     parser.add_argument("--runner", action="append", choices=PROVIDERS, default=[],
@@ -425,7 +462,8 @@ def main():
             runner = Runner(args.runner, args.runner_workspace)
             server = stack.enter_context(ThreadingHTTPServer((str(args.bind), args.port), Handler))
             server.tracker = Tracker(data, args.codex_dir.expanduser().resolve(), args.claude_dir.expanduser().resolve(),
-                                     args.demo, runner)
+                                     args.demo, runner, live_activity=True,
+                                     codex_socket=args.codex_socket.expanduser() if args.codex_socket else None)
         except (OSError, ValueError) as error:
             parser.exit(1, f"Threadline: {error}\n")
         server.daemon_threads = False

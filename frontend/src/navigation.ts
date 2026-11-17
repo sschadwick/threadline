@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export const views = ["projects", "revisit", "archive", "inbox", "patterns", "outbox"] as const;
+export const views = ["projects", "attention", "revisit", "archive", "inbox", "patterns", "outbox"] as const;
 export type View = typeof views[number];
 
 function subscribe(listener: () => void) {
@@ -10,6 +10,10 @@ function subscribe(listener: () => void) {
 
 export function projectHref(id: string) {
   return "#/projects/" + encodeURIComponent(id);
+}
+
+export function attentionHref(project?: string) {
+  return "#/attention" + (project ? "?project=" + encodeURIComponent(project) : "");
 }
 
 export function navigate(view: View, filter?: string, project?: string) {
@@ -33,6 +37,8 @@ export function useNavigation() {
     hash, view, filter: query.get("filter") ?? undefined,
     project: segment === "projects" && id ? decodeProject(id) : undefined,
     kickoffProject: view === "patterns" ? query.get("project") ?? undefined : undefined,
+    attentionProject: view === "attention" ? query.get("project") ?? undefined : undefined,
+    outboxRun: view === "outbox" ? query.get("run") ?? undefined : undefined,
   };
 }
 
