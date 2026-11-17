@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!LICENSE
+!frontend/
+!frontend/**
+frontend/node_modules/
+!threadline/
+!threadline/**
+threadline/web/
+**/__pycache__/
+**/*.py[cod]

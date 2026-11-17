@@ -243,6 +243,8 @@ def main():
         parser.error("A non-loopback --bind requires at least one --allow-from address.")
     if not 0 <= args.port <= 65535:
         parser.error("--port must be between 0 and 65535.")
+    if not all(WEB.joinpath(name).is_file() for name, _ in ASSETS.values()):
+        parser.exit(1, "Build the frontend first with npm --prefix frontend run build.\n")
     with ExitStack() as stack:
         data = args.data.expanduser().resolve()
         if args.demo:
