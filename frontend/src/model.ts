@@ -21,12 +21,56 @@ export interface ProjectFields {
   status: string;
 }
 
-export interface Project extends ProjectFields {
+interface ProjectLabels {
+  in_production: boolean;
+  revisit_later: boolean;
+  revisit_on: string | null;
+}
+
+export interface DecisionDraft {
+  choice: string;
+  rationale: string;
+  source: string;
+  source_session: string | null;
+  supersedes: string | null;
+}
+
+export interface Decision extends DecisionDraft {
+  id: string;
+  accepted_on: string;
+}
+
+export interface EvalDraft {
+  name: string;
+  task: string;
+  decision: string;
+}
+
+export interface KickoffEval {
+  id: string;
+  name: string;
+  task: string;
+  expected_decision: string;
+  runs: number;
+  last_result: {
+    passed: boolean;
+    expected: string;
+    actual: string[];
+    assertions: { name: string; passed: boolean }[];
+    brief: string;
+  } | null;
+}
+
+export interface Project extends ProjectFields, ProjectLabels {
   id: string;
   checkpoint: string;
   updated: number;
   revisit: boolean;
+  revisit_state: "later" | "due" | "inactive" | null;
   sessions: string[];
+  decisions: Decision[];
+  evals: KickoffEval[];
+  kickoff: string;
 }
 
 export interface WorkspaceSuggestion {
@@ -47,7 +91,9 @@ export interface DashboardState {
   savedProject?: string;
 }
 
-export interface ProjectDraft extends ProjectFields {
+export type ApplyDashboardChange = (request: Promise<DashboardState>) => Promise<DashboardState>;
+
+export interface ProjectDraft extends ProjectFields, ProjectLabels {
   id?: string;
   workspace?: string;
   sessions?: string[];

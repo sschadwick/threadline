@@ -64,7 +64,7 @@ export function App() {
           onTrack={trackProject} {...sessionActions} /> :
         <ProjectRegister key={navigation.revision} data={data} revisit={navigation.view === "revisit"}
           initialFilter={navigation.filter} initialProject={navigation.project}
-          onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} {...sessionActions} />}
+          onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply} {...sessionActions} />}
       {editor?.kind === "project" &&
         <ProjectEditor project={editor.project} context={editor.context} statuses={data.statuses}
           onClose={closeEditor} onSave={async (draft) => {

@@ -64,6 +64,7 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
   project?: Project; context?: ProjectContext; statuses: string[];
   onSave: (draft: ProjectDraft) => Promise<void>; onClose: () => void;
 }) {
+  const [revisitLater, setRevisitLater] = useState(project?.revisit_later ?? false);
   return <FormDialog id="project-dialog" formId="project-form" title={project ? "Edit project" : "New project"}
     submitLabel="Save project" onClose={onClose} onSubmit={async (values) => {
       await onSave({
@@ -71,6 +72,9 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
         name: String(values.get("name")), status: String(values.get("status")),
         area: String(values.get("area")), summary: String(values.get("summary")),
         next: String(values.get("next")), evidence: String(values.get("evidence")),
+        in_production: values.has("in_production"),
+        revisit_later: revisitLater,
+        revisit_on: String(values.get("revisit_on") ?? "") || null,
       });
     }}>
     {context?.label && <p className="muted">{context.label}</p>}
@@ -81,6 +85,13 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
         {statuses.map((status) => <option key={status}>{status}</option>)}
       </select></label>
     </div>
+    <div className="form-checks">
+      <label><input type="checkbox" name="in_production" defaultChecked={project?.in_production} /> In production</label>
+      <label><input type="checkbox" checked={revisitLater}
+        onChange={(event) => setRevisitLater(event.target.checked)} /> Revisit later</label>
+    </div>
+    <label>Revisit date (optional) <input type="date" name="revisit_on" disabled={!revisitLater}
+      defaultValue={project?.revisit_on ?? ""} /></label>
     <label>Checkpoint <textarea name="summary" rows={3} maxLength={2400} defaultValue={project?.summary}
       placeholder="What did you last verify?" /></label>
     <label>Next action <textarea name="next" rows={2} maxLength={800} defaultValue={project?.next}

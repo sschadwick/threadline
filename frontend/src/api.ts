@@ -1,4 +1,4 @@
-import type { DashboardState, ProjectDraft } from "./model";
+import type { DashboardState, DecisionDraft, EvalDraft, ProjectDraft } from "./model";
 
 async function request(path: string, body?: object): Promise<DashboardState> {
   const response = await fetch(path, body === undefined ? {} : {
@@ -16,4 +16,7 @@ export const api = {
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
   linkSession: (session: string, id: string | null) => request("/api/link", { session, id }),
+  saveDecision: (id: string, draft: DecisionDraft) => request("/api/decision", { id, ...draft }),
+  saveEval: (id: string, draft: EvalDraft) => request("/api/eval", { id, ...draft }),
+  replay: (id: string, evalId: string) => request("/api/replay", { id, case: evalId }),
 };

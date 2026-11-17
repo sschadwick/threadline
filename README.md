@@ -27,6 +27,10 @@ Run the archive without `--demo` or run `python3 -m threadline` from the checkou
 
 ![The session inbox showing unlinked Claude Code and Codex conversations with controls to attach them to projects](docs/images/inbox.png)
 
+Use **In production** to mark deployed projects and **Revisit later** to set an optional follow-up date. **Decisions** records a choice, its rationale, and supporting evidence. Superseded decisions stay in the project history. The continuation brief carries the active choices and their sources.
+
+Choose **Save as eval** on a decision and enter a kickoff task. **Replay kickoff** checks that a brief built from the saved snapshot includes the expected decision and evidence and excludes superseded revisions. The replay runs locally and does not call a model.
+
 Threadline refreshes session activity every minute while the dashboard is visible. After you track a workspace, later sessions can match its checkout path or project name. You decide the status and next action. Manual links and unlinks take priority.
 
 ## History and storage
@@ -40,7 +44,7 @@ Threadline reads from the host's filesystem. It uses `CLAUDE_CONFIG_DIR` and `CO
 
 The dashboard serves titles, dates, and working directories to your browser. Transcript bodies stay in the source stores. Threadline makes no external requests and requires no model credentials.
 
-Back up `~/.local/state/threadline/state.json` to keep project edits and session links. Threadline honors `XDG_STATE_HOME` and supports `--data PATH` for a custom location.
+Back up `~/.local/state/threadline/state.json` to keep project edits, session links, decisions, and replay cases. Threadline honors `XDG_STATE_HOME` and supports `--data PATH` for a custom location.
 
 ## Optional Docker install
 
