@@ -1,0 +1,3 @@
+"""Threadline, a local project dashboard for Claude Code and Codex."""
+
+__version__ = "0.1.0"
