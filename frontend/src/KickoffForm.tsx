@@ -13,14 +13,15 @@ interface Props {
 }
 
 export function KickoffForm({ data, pattern, initialProject, onApply, onCopy, onLaunch }: Props) {
+  const activeProjects = data.projects.filter((project) => !project.archived);
   const [draft, setDraft] = useState<Omit<KickoffDraft, "pattern">>({
-    project: initialProject ?? data.projects[0]?.id ?? "",
+    project: activeProjects.find((project) => project.id === initialProject)?.id ?? activeProjects[0]?.id ?? "",
     workspace: "", provider: "", task: "", criteria: "",
   });
   const [preview, setPreview] = useState<{ draft: KickoffDraft; result: KickoffPreview }>();
   const [pending, setPending] = useState<"preview" | "launch">();
   const [error, setError] = useState("");
-  const project = data.projects.find((item) => item.id === draft.project);
+  const project = activeProjects.find((item) => item.id === draft.project);
   const workspaces = draft.provider ? data.runner.workspaces
     : [...new Set([...(project?.workspaces ?? []), ...data.runner.workspaces])];
   const ready = preview?.draft.pattern === pattern ? preview : undefined;
@@ -65,12 +66,12 @@ export function KickoffForm({ data, pattern, initialProject, onApply, onCopy, on
 
   return <section className="panel workflow-panel" aria-labelledby="kickoff-heading">
     <h2 id="kickoff-heading">Prepare kickoff</h2>
-    {data.projects.length ? <>
+    {activeProjects.length ? <>
       <form className="kickoff-form" onSubmit={buildPreview}>
         <fieldset disabled={Boolean(pending)}>
           <label>Project <select required value={draft.project}
             onChange={(event) => change({ project: event.target.value, workspace: "" })}>
-            {data.projects.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+            {activeProjects.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
           </select></label>
           <label>Session <select value={draft.provider} onChange={(event) => change({
             provider: event.target.value as KickoffDraft["provider"], workspace: "",

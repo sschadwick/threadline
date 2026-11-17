@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import type { DashboardState } from "./model";
+import { views, type View } from "./navigation";
 
-export type View = "projects" | "revisit" | "inbox" | "patterns" | "outbox";
-
-const views: Record<View, { label: string; title: string; description: string; symbol: string }> = {
+const pages: Record<View, { label: string; title: string; description: string; symbol: string }> = {
   projects: {
     label: "Projects", title: "AI projects", symbol: "▤",
     description: "Pick up where you left off across Claude Code and Codex.",
@@ -11,6 +10,10 @@ const views: Record<View, { label: string; title: string; description: string; s
   revisit: {
     label: "Revisit", title: "Projects to revisit", symbol: "◷",
     description: "Scheduled follow-ups and open projects with 14 days of inactivity.",
+  },
+  archive: {
+    label: "Archive", title: "Archived projects", symbol: "▣",
+    description: "Open an archived project to see its history or restore it.",
   },
   inbox: {
     label: "Session inbox", title: "Session inbox", symbol: "▱",
@@ -28,6 +31,7 @@ const views: Record<View, { label: string; title: string; description: string; s
 
 interface Props {
   view: View;
+  projectPage: boolean;
   data?: DashboardState;
   refreshing: boolean;
   onNavigate: (view: View) => void;
@@ -36,8 +40,8 @@ interface Props {
   children: ReactNode;
 }
 
-export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh, onNewProject, children }: Props) {
-  const active = views[view];
+export function WorkspaceLayout({ view, projectPage, data, refreshing, onNavigate, onRefresh, onNewProject, children }: Props) {
+  const active = pages[view];
   const stale = data?.projects.filter((project) => project.revisit).length || 0;
   const pending = data?.outbox.filter((run) => Object.values(run.review).includes("pending")).length || 0;
   const scans = data && new Date(data.scanned * 1000).toLocaleTimeString([], {
@@ -49,14 +53,17 @@ export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh,
   ].filter(Boolean).join(" ");
 
   return <>
-    <a className="skip" href="#main">Skip to content</a>
+    <a className="skip" href="#main" onClick={(event) => {
+      event.preventDefault();
+      document.getElementById("main")?.focus();
+    }}>Skip to content</a>
     <aside className="sidebar" aria-label="Workspace">
       <div className="brand"><span className="mark" aria-hidden="true"><i /><i /><i /></span>Threadline</div>
       <nav aria-label="Views" className="nav">
-        {(Object.keys(views) as View[]).map((key) =>
+        {views.map((key) =>
           <button key={key} type="button" data-view={key} aria-current={view === key ? "page" : undefined}
             onClick={() => onNavigate(key)}>
-            <span aria-hidden="true">{views[key].symbol}</span> {views[key].label}
+            <span aria-hidden="true">{pages[key].symbol}</span> {pages[key].label}
             {key === "revisit" && stale > 0 && <small>{stale.toLocaleString()}</small>}
             {key === "outbox" && pending > 0 && <small>{pending.toLocaleString()}</small>}
           </button>,
@@ -80,12 +87,12 @@ export function WorkspaceLayout({ view, data, refreshing, onNavigate, onRefresh,
         </div>
       </header>
       <div className="page">
-        <div className="page-heading">
+        {!projectPage && <div className="page-heading">
           <div><h1>{active.title}</h1><p>{active.description}</p></div>
-          {view !== "patterns" && view !== "outbox" && <button type="button" className="button primary" id="add" disabled={!data} onClick={onNewProject}>
+          {(view === "projects" || view === "revisit" || view === "inbox") && <button type="button" className="button primary" id="add" disabled={!data} onClick={onNewProject}>
             <span aria-hidden="true">＋</span> New project
           </button>}
-        </div>
+        </div>}
         {data?.demo && <p id="demo-note" className="demo-note">Demo workspace · Changes last until you close Threadline.</p>}
         {notes && <div className="data-note">{notes}</div>}
         {children}

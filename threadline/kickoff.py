@@ -8,6 +8,8 @@ SOURCE_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
 def revisit_state(project, updated, scanned):
+    if project.get("archived"):
+        return None
     if project.get("revisit_later"):
         reminder = project.get("revisit_on")
         return "due" if reminder and reminder <= date.fromtimestamp(scanned).isoformat() else "later"
@@ -16,17 +18,16 @@ def revisit_state(project, updated, scanned):
     return None
 
 
-def update_project_labels(project, data):
-    production = data.get("in_production", project.get("in_production", False))
+def update_revisit(project, data):
     later = data.get("revisit_later", project.get("revisit_later", False))
     reminder = data.get("revisit_on", project.get("revisit_on"))
-    if not isinstance(production, bool) or not isinstance(later, bool):
-        raise ValueError("Choose valid project labels.")
+    if not isinstance(later, bool):
+        raise ValueError("Choose a valid revisit reminder.")
     if reminder is not None and (
         not isinstance(reminder, str) or date.fromisoformat(reminder).isoformat() != reminder
     ):
         raise ValueError("Enter a valid revisit date.")
-    project.update(in_production=production, revisit_later=later, revisit_on=reminder if later else None)
+    project.update(revisit_later=later, revisit_on=reminder if later else None)
 
 
 def active_decisions(decisions):

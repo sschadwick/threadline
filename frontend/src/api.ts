@@ -1,5 +1,5 @@
 import type {
-  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, Proposal, ReviewAction,
+  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectStateChange, Proposal, ReviewAction,
 } from "./model";
 
 async function request<T = DashboardState>(path: string, body?: object): Promise<T> {
@@ -17,6 +17,7 @@ export const api = {
   load: () => request("/api/state"),
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
+  setProjectState: (id: string, change: ProjectStateChange) => request("/api/project-state", { id, ...change }),
   linkSession: (session: string, id: string | null) => request("/api/link", { session, id }),
   saveDecision: (id: string, draft: DecisionDraft) => request("/api/decision", { id, ...draft }),
   saveEval: (id: string, draft: EvalDraft) => request("/api/eval", { id, ...draft }),

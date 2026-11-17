@@ -20,7 +20,7 @@ export function DecisionPanel({ project, sessions, onApply }: Props) {
   return <>
     <section className="decision-panel" aria-labelledby="decisions-heading">
       <div className="section-heading">
-        <h3 id="decisions-heading">Decisions</h3>
+        <h2 id="decisions-heading">Decisions</h2>
         <button className="button secondary" type="button" onClick={() => setEditor({ kind: "decision" })}>Add decision</button>
       </div>
       {project.decisions.length ? <ol className="decision-list">
@@ -32,7 +32,7 @@ export function DecisionPanel({ project, sessions, onApply }: Props) {
               <span>{retired ? "Superseded" : "Active"}</span>
               <time dateTime={decision.accepted_on}>{dateLabel(decision.accepted_on)}</time>
             </div>
-            <h4>{decision.choice}</h4>
+            <h3>{decision.choice}</h3>
             <p>{decision.rationale}</p>
             <p className="muted"><strong>Source</strong> {decision.source}</p>
             {previous && <p className="muted"><strong>Supersedes</strong> {previous.choice}</p>}

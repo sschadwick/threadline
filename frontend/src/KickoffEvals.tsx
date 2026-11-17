@@ -19,10 +19,10 @@ export function KickoffEvals({ project, onApply }: { project: Project; onApply: 
   }
 
   return <section className="decision-panel" aria-labelledby="evals-heading">
-    <div className="section-heading"><h3 id="evals-heading">Evals</h3></div>
+    <div className="section-heading"><h2 id="evals-heading">Evals</h2></div>
     {project.evals.length ? <ul className="decision-list">
       {project.evals.map((item) => <li key={item.id}>
-        <h4>{item.name}</h4>
+        <h3>{item.name}</h3>
         <p>{item.task}</p>
         <div className="decision-actions">
           <button className="button secondary" type="button" disabled={Boolean(replaying)}

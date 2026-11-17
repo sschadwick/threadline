@@ -84,21 +84,47 @@ class ThreadlineTest(unittest.TestCase):
         revisit = [p["status"] for p in tracker.snapshot()["projects"] if p["revisit"]]
         self.assertEqual(revisit, ["In progress"])
 
-    def test_production_and_revisit_labels_are_independent(self):
+    def test_legacy_production_becomes_an_editable_status(self):
         tracker = self.tracker()
-        tracker.snapshot()
-        fields = {"name": "Example", "status": "Parked"}
-        created = tracker.change("/api/project", fields)["projects"][0]
-        self.assertFalse(created["in_production"])
-        fields["id"] = created["id"]
-        later = tracker.change("/api/project", {**fields, "in_production": True, "revisit_later": True})
-        self.assertEqual(later["projects"][0]["revisit_state"], "later")
-        tracker.change("/api/project", {**fields, "revisit_on": date.today().isoformat()})
+        tracker.change("/api/project", {
+            "name": "Example", "status": "In progress", "revisit_later": True, "revisit_on": date.today().isoformat(),
+        })
+        saved = json.loads(self.state.read_text())
+        saved["projects"][0].update(in_production=True, checkpoint="2020-01-01")
+        self.state.write_text(json.dumps(saved))
+        project = self.tracker().snapshot()["projects"][0]
+        self.assertEqual(project["status"], "In production")
+        self.assertNotIn("in_production", project)
+        self.assertEqual(project["revisit_state"], "due")
+        self.tracker().change("/api/project-state", {"id": project["id"], "status": "Parked"})
         project = self.tracker().snapshot()["projects"][0]
         self.assertEqual(project["status"], "Parked")
-        self.assertTrue(project["in_production"])
+        self.assertEqual(project["checkpoint"], "2020-01-01")
+
+    def test_archive_preserves_project_history_and_suspends_revisit(self):
+        self.write_logs()
+        tracker = self.tracker()
+        workspace = tracker.snapshot()["suggestions"][0]
+        project_id = tracker.change("/api/project", {
+            "name": "Example", "status": "In production", "sessions": workspace["sessions"],
+            "revisit_later": True, "revisit_on": date.today().isoformat(),
+        })["savedProject"]
+        baseline = tracker.change("/api/decision", {
+            "id": project_id, "choice": "Keep native startup", "rationale": "Fewer dependencies", "source": "Packaging review",
+        })["projects"][0]
+        tracker.change("/api/project-state", {"id": project_id, "archived": True})
+        restored_tracker = self.tracker()
+        archived = restored_tracker.snapshot()["projects"][0]
+        self.assertTrue(archived["archived"])
+        self.assertIsNone(archived["revisit_state"])
+        for field in ("status", "checkpoint", "sessions", "decisions"):
+            self.assertEqual(archived[field], baseline[field])
+        with self.assertRaisesRegex(ValueError, "Restore"):
+            restored_tracker.preview({"project": project_id})
+        project = restored_tracker.change("/api/project-state", {"id": project_id, "archived": False})["projects"][0]
+        self.assertFalse(project["archived"])
+        self.assertEqual(project["status"], "In production")
         self.assertEqual(project["revisit_state"], "due")
-        self.assertEqual(project["checkpoint"], created["checkpoint"])
 
     def test_decision_replay_uses_frozen_revisions_and_evidence(self):
         self.write_logs()

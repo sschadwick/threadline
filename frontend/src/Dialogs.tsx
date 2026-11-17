@@ -72,7 +72,6 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
         name: String(values.get("name")), status: String(values.get("status")),
         area: String(values.get("area")), summary: String(values.get("summary")),
         next: String(values.get("next")), evidence: String(values.get("evidence")),
-        in_production: values.has("in_production"),
         revisit_later: revisitLater,
         revisit_on: String(values.get("revisit_on") ?? "") || null,
       });
@@ -86,7 +85,6 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
       </select></label>
     </div>
     <div className="form-checks">
-      <label><input type="checkbox" name="in_production" defaultChecked={project?.in_production} /> In production</label>
       <label><input type="checkbox" checked={revisitLater}
         onChange={(event) => setRevisitLater(event.target.checked)} /> Revisit later</label>
     </div>
