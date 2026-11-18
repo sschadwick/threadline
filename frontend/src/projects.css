@@ -109,3 +109,16 @@ select#sort { font-size: 11px; width: 96px; min-height: 31px; padding: 3px; }
 .eval-result ul { margin: 4px 0 7px; padding-inline-start: 16px; }
 .eval-result summary { cursor: pointer; color: var(--accent); }
 .eval-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow: auto; }
+.suggestion-item { padding: 16px; border-top: 1px solid var(--line-soft); overflow-wrap: anywhere; }
+.suggestion-item h3 { margin: 0 0 5px; font-size: 16px; }
+.suggestion-item p, .suggestion-item small { font-size: 12px; }
+.suggestion-item .cwd { font: 10px/1.5 var(--mono); color: var(--faint); }
+.suggestion-item details { margin-top: 10px; font-size: 12px; }
+.suggestion-item summary { color: var(--accent); cursor: pointer; min-height: 28px; }
+.suggestion-item ul { padding-left: 18px; margin: 4px 0 12px; }
+.suggestion-item li { padding: 5px 0; }
+.suggestion-item small { display: block; color: var(--muted); }
+.suggestion-sessions { border: 1px solid var(--line); border-radius: 5px; margin: 12px 0; max-height: 240px; overflow: auto; }
+.suggestion-sessions label { display: flex; align-items: start; gap: 8px; font-size: 12px; }
+.suggestion-sessions small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.suggestion-sessions input { flex: 0 0 auto; width: auto; accent-color: var(--accent); }

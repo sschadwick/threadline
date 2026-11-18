@@ -128,18 +128,22 @@ export interface OutboxRun {
   review: Partial<Record<Proposal, "pending" | "accepted" | "dismissed">>;
 }
 
-export interface WorkspaceSuggestion {
+export interface ProjectSuggestion {
+  id: string;
   workspace: string;
   name: string;
   sessions: string[];
   sources: SessionSource[];
+  reason: string;
+  updated: number;
+  dismissed: boolean;
 }
 
 export interface DashboardState {
   projects: Project[];
   sessions: Session[];
   statuses: string[];
-  suggestions: WorkspaceSuggestion[];
+  suggestions: ProjectSuggestion[];
   sources: Record<SessionSource, { count: number; note: string }>;
   scanned: number;
   demo: boolean;
@@ -155,12 +159,14 @@ export type ProjectStateChange = { status: string } | { archived: boolean };
 
 export interface ProjectDraft extends ProjectFields, ProjectReminder {
   id?: string;
+  suggestion?: string;
   workspace?: string;
   sessions?: string[];
 }
 
 export interface ProjectContext {
   name?: string;
+  suggestion?: string;
   label: string;
   workspace?: string;
   sessions: string[];

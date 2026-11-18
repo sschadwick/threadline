@@ -11,6 +11,7 @@ import { ProjectDetails } from "./ProjectDetails";
 import { ProjectMetrics } from "./ProjectMetrics";
 import { ProjectRegister } from "./ProjectRegister";
 import { SessionInbox } from "./SessionInbox";
+import { SuggestedProjects } from "./SuggestedProjects";
 import { useDashboard } from "./useDashboard";
 import { WorkspaceLayout } from "./WorkspaceLayout";
 
@@ -65,7 +66,8 @@ export function App() {
       {navigation.view === "projects" && !navigation.project && <ProjectMetrics data={data} onNavigate={navigate} />}
       {navigation.view === "inbox" &&
         <SessionInbox key={navigation.hash} data={data} initialFilter={navigation.filter}
-          onTrack={trackProject} {...sessionActions} />}
+          {...sessionActions} />}
+      {navigation.view === "suggestions" && <SuggestedProjects data={data} onTrack={trackProject} onApply={apply} />}
       {navigation.view === "attention" && <AttentionQueue key={navigation.hash} groups={attention}
         projectId={navigation.attentionProject} onApply={apply} {...sessionActions} />}
       {!navigation.project && (navigation.view === "projects" || navigation.view === "revisit" || navigation.view === "archive") &&
@@ -81,6 +83,7 @@ export function App() {
       {navigation.view === "outbox" && <Outbox data={data} runId={navigation.outboxRun} onApply={apply} onCopy={copy} />}
       {editor?.kind === "project" &&
         <ProjectEditor project={editor.project} context={editor.context} statuses={data.statuses}
+          sessions={data.sessions.filter((session) => editor.context?.sessions.includes(session.key))}
           onClose={closeEditor} onSave={async (draft) => {
             const result = await apply(api.saveProject(draft));
             navigate("projects", undefined, result.savedProject);

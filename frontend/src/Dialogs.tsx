@@ -60,15 +60,18 @@ export function FormDialog({ id, formId, title, submitLabel, onClose, onSubmit, 
   </Modal>;
 }
 
-export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
+export function ProjectEditor({ project, context, statuses, sessions, onSave, onClose }: {
   project?: Project; context?: ProjectContext; statuses: string[];
+  sessions: Session[];
   onSave: (draft: ProjectDraft) => Promise<void>; onClose: () => void;
 }) {
   const [revisitLater, setRevisitLater] = useState(project?.revisit_later ?? false);
-  return <FormDialog id="project-dialog" formId="project-form" title={project ? "Edit project" : "New project"}
-    submitLabel="Save project" onClose={onClose} onSubmit={async (values) => {
+  const [selected, setSelected] = useState(context?.sessions ?? []);
+  return <FormDialog id="project-dialog" formId="project-form" title={project ? "Edit project" : context?.suggestion ? "Track suggested project" : "New project"}
+    submitLabel={context?.suggestion ? "Track project" : "Save project"} onClose={onClose} onSubmit={async (values) => {
+      if (context?.suggestion && !selected.length) throw new Error("Select at least one session to link.");
       await onSave({
-        id: project?.id, sessions: context?.sessions, workspace: context?.workspace,
+        id: project?.id, sessions: selected, workspace: context?.workspace, suggestion: context?.suggestion,
         name: String(values.get("name")), status: String(values.get("status")),
         area: String(values.get("area")), summary: String(values.get("summary")),
         next: String(values.get("next")), evidence: String(values.get("evidence")),
@@ -77,6 +80,13 @@ export function ProjectEditor({ project, context, statuses, onSave, onClose }: {
       });
     }}>
     {context?.label && <p className="muted">{context.label}</p>}
+    {context?.suggestion && <fieldset className="suggestion-sessions"><legend>Sessions to link</legend>
+      {sessions.map((session) => <label key={session.key}><input type="checkbox" checked={selected.includes(session.key)}
+        onChange={(event) => setSelected(event.target.checked ? [...selected, session.key]
+          : selected.filter((key) => key !== session.key))} />
+        <span>{session.title}<small>{sourceNames[session.source]} · {session.cwd}</small></span>
+      </label>)}
+    </fieldset>}
     <label>Project name <input name="name" required maxLength={100} autoFocus defaultValue={project?.name ?? context?.name} /></label>
     <div className="form-pair">
       <label>Area <input name="area" maxLength={70} defaultValue={project?.area} placeholder="e.g. Agent tooling" /></label>

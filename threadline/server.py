@@ -18,6 +18,7 @@ from uuid import uuid4
 from . import __version__
 from .activity import read_activity
 from .demo import demo_content
+from .discovery import suggest_projects
 from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
@@ -47,13 +48,17 @@ class Tracker:
         self.projects = []
         self.overrides = {}
         self.runs = []
+        self.dismissed_suggestions = []
         if data.exists():
             try:
                 state = json.loads(data.read_text(encoding="utf-8"))
                 self.projects, self.overrides = state["projects"], state["overrides"]
                 self.runs = state.get("runs", [])
+                self.dismissed_suggestions = state.get("dismissed_suggestions", [])
                 if (not isinstance(self.projects, list) or not isinstance(self.overrides, dict)
                         or not isinstance(self.runs, list)
+                        or not isinstance(self.dismissed_suggestions, list)
+                        or any(not isinstance(value, str) for value in self.dismissed_suggestions)
                         or any(not isinstance(run, dict) or not set(RUN_FIELDS).issubset(run)
                                or not {"digest", "checkpoint"} <= run.keys() for run in self.runs)
                         or any(value is not None and not isinstance(value, str) for value in self.overrides.values())):
@@ -100,7 +105,9 @@ class Tracker:
         if refresh or self.scanned == 0:
             self.refresh()
         rows = [row.copy() for row in self.rows]
-        by_project, suggestions = organize(rows, self.projects, self.overrides)
+        by_project, _ = organize(rows, self.projects, self.overrides)
+        suggestions = [{**group, "dismissed": group["id"] in self.dismissed_suggestions}
+                       for group in suggest_projects(rows, self.projects, self.overrides)]
         projects = []
         for project in self.projects:
             linked = by_project[project["id"]]
@@ -128,19 +135,22 @@ class Tracker:
                 "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False)}
                            for run in reversed(self.runs)]}
 
-    def save(self, projects, overrides, runs=None):
+    def save(self, projects, overrides, runs=None, *, dismissed_suggestions=None):
         runs = self.runs if runs is None else runs
+        dismissed_suggestions = self.dismissed_suggestions if dismissed_suggestions is None else dismissed_suggestions
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=self.path.parent, prefix=".threadline-")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump({"projects": projects, "overrides": overrides, "runs": runs}, stream, ensure_ascii=False, indent=2)
+                json.dump({"projects": projects, "overrides": overrides, "runs": runs,
+                           "dismissed_suggestions": dismissed_suggestions}, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(name, self.path)
         finally:
             Path(name).unlink(missing_ok=True)
         self.projects, self.overrides, self.runs = projects, overrides, runs
+        self.dismissed_suggestions = dismissed_suggestions
 
     def preview(self, data):
         project = next((p for p in self.projects if p["id"] == data.get("project")), None)
@@ -241,6 +251,17 @@ class Tracker:
         return self.snapshot()
 
     def change(self, path, data):
+        if path == "/api/suggestion":
+            identity, dismissed = data.get("suggestion"), data.get("dismissed")
+            if not isinstance(identity, str) or not isinstance(dismissed, bool):
+                raise ValueError("Choose a suggested project and review action.")
+            if not any(group["id"] == identity for group in self.snapshot()["suggestions"]):
+                raise ValueError("Suggested project no longer exists. Refresh the suggestions.")
+            reviewed = [value for value in self.dismissed_suggestions if value != identity]
+            if dismissed:
+                reviewed.append(identity)
+            self.save(self.projects, self.overrides, dismissed_suggestions=reviewed)
+            return self.snapshot()
         project_ids = {p["id"] for p in self.projects}
         known = {s["key"]: s for s in self.rows}
         projects, overrides = list(self.projects), dict(self.overrides)
@@ -266,9 +287,18 @@ class Tracker:
                 projects[projects.index(previous)] = project
             else:
                 project_id = uuid4().hex
+                suggestion = None
+                if "suggestion" in data:
+                    suggestion = next((group for group in self.snapshot()["suggestions"]
+                                       if group["id"] == data["suggestion"] and not group["dismissed"]), None)
+                    if suggestion is None:
+                        raise ValueError("Suggested project no longer exists. Refresh the suggestions.")
                 keys = data.get("sessions", [])
                 if not isinstance(keys, list) or any(not isinstance(k, str) or k not in known for k in keys):
                     raise ValueError("Refresh the session list before creating the project.")
+                if suggestion is not None and (not keys or len(keys) != len(set(keys))
+                                               or not set(keys) <= set(suggestion["sessions"])):
+                    raise ValueError("Choose sessions from the suggested project.")
                 workspace = data.get("workspace")
                 if workspace is not None and (
                     not isinstance(workspace, str) or not keys
@@ -277,10 +307,15 @@ class Tracker:
                     raise ValueError("Workspace does not match the selected sessions.")
                 project = {**values, "id": project_id, "status": status,
                            "checkpoint": date.today().isoformat(), "aliases": [values["name"]],
-                           "roots": [workspace] if workspace else [], "sessions": []}
+                           "roots": [suggestion["workspace"]] if suggestion else [workspace] if workspace else [],
+                           "sessions": []}
+                if suggestion and suggestion["name"] not in project["aliases"]:
+                    project["aliases"].append(suggestion["name"])
                 update_revisit(project, data)
                 projects.append(project)
                 overrides.update(dict.fromkeys(keys, project_id))
+                if suggestion:
+                    overrides.update(dict.fromkeys(set(suggestion["sessions"]) - set(keys), None))
         elif path == "/api/link":
             key = data.get("session")
             if not isinstance(key, str) or key not in known:
@@ -391,7 +426,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = self.path.partition("?")[0]
         if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
-                        "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge"):
+                        "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge",
+                        "/api/suggestion"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:

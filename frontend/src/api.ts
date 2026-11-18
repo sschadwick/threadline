@@ -17,6 +17,7 @@ export const api = {
   load: () => request("/api/state"),
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
+  reviewSuggestion: (suggestion: string, dismissed: boolean) => request("/api/suggestion", { suggestion, dismissed }),
   setProjectState: (id: string, change: ProjectStateChange) => request("/api/project-state", { id, ...change }),
   setContinuation: (id: string, session: string | null) => request("/api/project-pin", { id, session }),
   linkSession: (session: string, id: string | null) => request("/api/link", { session, id }),

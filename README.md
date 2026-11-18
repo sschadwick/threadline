@@ -20,8 +20,8 @@ From a source checkout, [build the frontend](#develop) and run `python3 -m threa
 
 Run the archive without `--demo` or run `python3 -m threadline` from the checkout. Open the same address. Threadline starts with an empty project register and scans the history available on that machine.
 
-1. Find related sessions in **Session inbox**. Use **Workspaces** to see checkouts with at least two unlinked sessions.
-2. Choose **Track workspace** to create a project and link its sessions. You can also link individual sessions to a project.
+1. Open **Suggested projects** to review untracked checkouts and directories with related sessions. Each suggestion shows its source, path, and supporting sessions.
+2. Choose **Track project**, review the name and select the sessions to link, then confirm. Discovery never creates projects on its own. **Dismiss** hides a suggestion across refreshes and restarts; restore it from the **Dismissed** filter. You can also create a project or link individual sessions from **Session inbox**.
 3. Record a checkpoint and a next action when you stop work. **Revisit** surfaces open projects after 14 days without a checkpoint or linked-session activity.
 4. When you return, copy a resume command for an existing session or a continuation brief for a new one.
 
@@ -61,6 +61,8 @@ Threadline refreshes session activity every minute while the dashboard is visibl
 | Codex | `~/.codex` | The local state database, session index, and available rollout headers |
 
 Threadline reads from the host's filesystem. It uses `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when set. Use `--claude-dir` and `--codex-dir` to point at other local directories. Compressed Codex rollouts rely on metadata in the database or index.
+
+Project suggestions use session metadata and local checkout names. Discovery checks immediate child checkouts and `outputs/*` inside session directories, so a chat can find a repository created during its work. A uniquely matching repository name in a session title can connect conversations across directories. Repeated sessions in the same directory provide a fallback. These are suggestions to review, not semantic analysis of transcript contents; generically titled conversations without a checkout can still require manual linking. Discovery makes no model calls.
 
 The dashboard serves titles, dates, and working directories to your browser. Transcript bodies stay in the source stores. Browsing history and copying kickoffs run locally. When you start a session, the selected CLI sends the reviewed kickoff and the session's working context to its model provider.
 
