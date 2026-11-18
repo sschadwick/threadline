@@ -50,10 +50,7 @@ export function ProjectEditor({ project, context, statuses, sessions, providers,
     }
   }
 
-  useEffect(() => {
-    if (!project && selected.length && providers.length) void generate();
-    return () => pending.current?.abort();
-  }, []);
+  useEffect(() => () => pending.current?.abort(), []);
 
   return <FormDialog id="project-dialog" formId="project-form" title={project ? "Edit project" : context?.suggestion ? "Track suggested project" : "New project"}
     submitLabel={context?.suggestion ? "Track project" : "Save project"} submitDisabled={drafting}
