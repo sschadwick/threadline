@@ -13,4 +13,8 @@ dialog textarea { resize: vertical; }
 .form-checks input { width: auto; accent-color: var(--accent); }
 .form-error { font-size: 12px; color: #ffc1b6; }
 .form-error:empty { display: none; }
+.project-ai { padding: 10px; border: 1px solid var(--line); border-radius: 5px; font-size: 12px; }
+.project-ai .workflow-actions { align-items: end; }
+.project-ai p { margin-top: 7px; }
+.project-ai p:empty { display: none; }
 #toast { position: fixed; z-index: 2; right: 17px; bottom: 17px; max-width: calc(100% - 34px); background: #2d3c28; border: 1px solid #506747; color: var(--text); padding: 10px 13px; border-radius: 6px; font-size: 13px; box-shadow: 0 5px 16px #0006; }

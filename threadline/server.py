@@ -22,6 +22,7 @@ from .discovery import suggest_projects
 from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
+from .project_draft import prepare_draft, validate_draft
 from .runner import PROVIDERS, RunError, Runner
 
 WEB = files("threadline").joinpath("web")
@@ -40,6 +41,7 @@ class Tracker:
         self.claude = claude
         self.cache = {}
         self.lock = threading.RLock()
+        self.draft_lock = threading.Lock()
         self.demo = demo
         self.live_activity = live_activity
         self.codex_socket = codex_socket
@@ -132,6 +134,7 @@ class Tracker:
         return {"projects": projects, "sessions": rows, "sources": self.sources,
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
                 "demo": self.demo, "patterns": PATTERNS, "runner": self.runner.options(),
+                "drafting": self.draft_lock.locked(),
                 "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False)}
                            for run in reversed(self.runs)]}
 
@@ -162,6 +165,24 @@ class Tracker:
             self.refresh()
         linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
         return preview_kickoff(project, linked[project["id"]], data, self.runner.options())
+
+    def draft_project(self, data):
+        if self.demo:
+            raise ValueError("AI drafting is unavailable in demo mode.")
+        if not self.draft_lock.acquire(blocking=False):
+            raise RunError("An AI project draft is already being generated. Try again shortly.")
+        try:
+            with self.lock:
+                provider, prompt, schema = prepare_draft(data, self.snapshot())
+            try:
+                result = self.runner.draft(provider, prompt, schema)
+            except OSError as error:
+                raise RunError("Could not start the AI provider. You can fill the form manually.") from error
+            except (ValueError, KeyError, TypeError) as error:
+                raise RunError("AI returned an invalid project draft. You can fill the form manually.") from error
+            return validate_draft(result, STATUSES)
+        finally:
+            self.draft_lock.release()
 
     def launch(self, data):
         request_id = data.get("request_id")
@@ -427,7 +448,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.partition("?")[0]
         if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
                         "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge",
-                        "/api/suggestion"):
+                        "/api/suggestion", "/api/project-draft"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -438,6 +459,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(data, dict):
                 raise ValueError("Invalid request.")
             tracker = self.server.tracker
+            if path == "/api/project-draft":
+                self.send_json(200, tracker.draft_project(data))
+                return
             with tracker.lock:
                 if path == "/api/refresh":
                     result = tracker.snapshot(refresh=True)
@@ -454,8 +478,12 @@ class Handler(BaseHTTPRequestHandler):
                     tracker.snapshot()
                     result = tracker.change(path, data)
             self.send_json(200, result)
+        except RunError as error:
+            self.send_json(503, {"error": str(error)})
         except (ValueError, UnicodeError) as error:
             self.send_json(400, {"error": str(error)})
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except OSError:
             self.send_json(500, {"error": "The project store is unavailable. Changes were not saved."})
 

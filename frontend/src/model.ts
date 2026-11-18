@@ -164,6 +164,13 @@ export interface ProjectDraft extends ProjectFields, ProjectReminder {
   sessions?: string[];
 }
 
+export interface ProjectDraftRequest {
+  provider: SessionSource;
+  suggestion?: string;
+  sessions: string[];
+  fields: ProjectFields;
+}
+
 export interface ProjectContext {
   name?: string;
   suggestion?: string;

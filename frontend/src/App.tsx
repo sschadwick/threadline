@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { api } from "./api";
 import { AttentionQueue, projectAttention } from "./AttentionQueue";
 import { resumeCommand } from "./continuation";
-import { CopyDialog, LinkEditor, ProjectEditor } from "./Dialogs";
+import { CopyDialog, LinkEditor } from "./Dialogs";
+import { ProjectEditor } from "./ProjectEditor";
 import type { Project, ProjectContext, Session } from "./model";
 import { navigate, useNavigation } from "./navigation";
 import { Outbox } from "./Outbox";
@@ -83,6 +84,7 @@ export function App() {
       {navigation.view === "outbox" && <Outbox data={data} runId={navigation.outboxRun} onApply={apply} onCopy={copy} />}
       {editor?.kind === "project" &&
         <ProjectEditor project={editor.project} context={editor.context} statuses={data.statuses}
+          providers={data.demo ? [] : data.runner.providers}
           sessions={data.sessions.filter((session) => editor.context?.sessions.includes(session.key))}
           onClose={closeEditor} onSave={async (draft) => {
             const result = await apply(api.saveProject(draft));

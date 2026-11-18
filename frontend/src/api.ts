@@ -1,9 +1,11 @@
 import type {
-  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectStateChange, Proposal, ReviewAction,
+  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectDraftRequest, ProjectFields,
+  ProjectStateChange, Proposal, ReviewAction,
 } from "./model";
 
-async function request<T = DashboardState>(path: string, body?: object): Promise<T> {
-  const response = await fetch(path, body === undefined ? {} : {
+async function request<T = DashboardState>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, body === undefined ? { signal } : {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -17,6 +19,7 @@ export const api = {
   load: () => request("/api/state"),
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
+  draftProject: (context: ProjectDraftRequest, signal: AbortSignal) => request<ProjectFields>("/api/project-draft", context, signal),
   reviewSuggestion: (suggestion: string, dismissed: boolean) => request("/api/suggestion", { suggestion, dismissed }),
   setProjectState: (id: string, change: ProjectStateChange) => request("/api/project-state", { id, ...change }),
   setContinuation: (id: string, session: string | null) => request("/api/project-pin", { id, session }),
