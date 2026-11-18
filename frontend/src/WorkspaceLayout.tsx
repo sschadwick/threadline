@@ -7,6 +7,10 @@ const pages: Record<View, { label: string; title: string; description: string; s
     label: "Projects", title: "AI projects", symbol: "▤",
     description: "Pick up where you left off across Claude Code and Codex.",
   },
+  suggestions: {
+    label: "Suggested projects", title: "Suggested projects", symbol: "＋",
+    description: "Review related sessions and choose which projects to track.",
+  },
   attention: {
     label: "Needs attention", title: "Needs attention", symbol: "!",
     description: "Sessions waiting for input, run failures, and proposals ready for review.",
@@ -50,6 +54,7 @@ export function WorkspaceLayout({ view, projectPage, attentionCount, data, refre
   const active = pages[view];
   const stale = data?.projects.filter((project) => project.revisit).length || 0;
   const pending = data?.outbox.filter((run) => Object.values(run.review).includes("pending")).length || 0;
+  const suggested = data?.suggestions.filter((group) => !group.dismissed).length || 0;
   const scans = data && new Date(data.scanned * 1000).toLocaleTimeString([], {
     hour: "numeric", minute: "2-digit",
   });
@@ -71,6 +76,7 @@ export function WorkspaceLayout({ view, projectPage, attentionCount, data, refre
             onClick={() => onNavigate(key)}>
             <span aria-hidden="true">{pages[key].symbol}</span> {pages[key].label}
             {key === "revisit" && stale > 0 && <small>{stale.toLocaleString()}</small>}
+            {key === "suggestions" && suggested > 0 && <small>{suggested.toLocaleString()}</small>}
             {key === "attention" && attentionCount > 0 && <small>{attentionCount.toLocaleString()}</small>}
             {key === "outbox" && pending > 0 && <small>{pending.toLocaleString()}</small>}
           </button>,

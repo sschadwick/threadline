@@ -70,10 +70,20 @@ class Runner:
         workspace = Path(run["workspace"])
         if str(workspace.resolve(strict=True)) != str(workspace) or str(workspace) not in self.workspaces:
             raise RunError("The approved workspace changed before launch.")
-        provider = run["provider"]
+        output = self.execute(run["provider"], workspace, run["brief"], RESULT_SCHEMA, session_id=run["id"])
+        return parse_result(run["provider"], output)
+
+    def draft(self, provider, brief, schema):
+        if provider not in self.commands:
+            raise ValueError("Choose an enabled AI provider.")
+        output = self.execute(provider, None, brief, schema, draft=True)
+        return parse_response(provider, output)[1]
+
+    def execute(self, provider, workspace, brief, result_schema, *, draft=False, session_id=None):
         executable = str(Path(self.commands[provider]).resolve(strict=True))
-        schema = json.dumps(RESULT_SCHEMA)
+        schema = json.dumps(result_schema)
         with tempfile.TemporaryDirectory(prefix="threadline-run-") as scratch:
+            workspace = workspace or Path(scratch)
             if provider == "codex":
                 schema_path = Path(scratch) / "result.json"
                 schema_path.write_text(schema, encoding="utf-8")
@@ -92,22 +102,33 @@ class Runner:
                     "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--json",
                     "--output-schema", str(schema_path), "-",
                 ]
+                if draft:
+                    arguments[0:0] = ["-c", 'forced_login_method="chatgpt"']
+                    arguments.insert(arguments.index("--json"), "--ephemeral")
             else:
                 arguments = [
                     "--print", "--output-format", "json", "--restricted", "--strict-mcp-config",
                     "--safe-mode", "--disable-slash-commands", "--tools", "Read,Glob,Grep",
                     "--permission-mode", "plan", "--max-turns", "8", "--json-schema", schema,
-                    "--session-id", str(UUID(hex=run["id"])),
                 ]
-            output = self.capture([executable, *arguments], workspace, run["brief"], scratch)
-            return parse_result(provider, output)
+                if draft:
+                    arguments[arguments.index("--tools") + 1] = ""
+                    arguments[arguments.index("--max-turns") + 1] = "2"
+                    arguments.append("--no-session-persistence")
+                elif session_id is not None:
+                    arguments.extend(["--session-id", str(UUID(hex=session_id))])
+            options = {"timeout": 90, "subscription_only": True} if draft else {}
+            return self.capture([executable, *arguments], workspace, brief, scratch, **options)
 
-    def capture(self, command, workspace, brief, scratch):
+    def capture(self, command, workspace, brief, scratch, *, timeout=TIMEOUT_SECONDS, subscription_only=False):
         if self.stop.is_set():
             raise RunError("Threadline stopped the session.")
         environment = {key: value for key, value in os.environ.items() if key in ENVIRONMENT}
+        if subscription_only:
+            environment.pop("OPENAI_API_KEY", None)
+            environment.pop("ANTHROPIC_API_KEY", None)
         output = bytearray()
-        deadline = time.monotonic() + TIMEOUT_SECONDS
+        deadline = time.monotonic() + timeout
         with tempfile.TemporaryFile(dir=scratch) as prompt:
             prompt.write(brief.encode())
             prompt.seek(0)
@@ -120,7 +141,7 @@ class Runner:
                             if self.stop.is_set():
                                 raise RunError("Threadline stopped the session.")
                             if time.monotonic() >= deadline:
-                                raise RunError("Session exceeded the five-minute limit.")
+                                raise RunError(f"Session exceeded the {timeout}-second limit.")
                             if selector.select(timeout=0.25):
                                 chunk = os.read(child.stdout.fileno(), 65536)
                                 if not chunk:
@@ -132,7 +153,7 @@ class Runner:
                         if self.stop.wait(0.25):
                             raise RunError("Threadline stopped the session.")
                         if time.monotonic() >= deadline:
-                            raise RunError("Session exceeded the five-minute limit.")
+                            raise RunError(f"Session exceeded the {timeout}-second limit.")
                     if child.returncode:
                         raise RunError(f"The runner exited with code {child.returncode}. Check the CLI on this host.")
                 finally:
@@ -143,7 +164,7 @@ class Runner:
         return output
 
 
-def parse_result(provider, output):
+def parse_response(provider, output):
     if provider == "codex":
         session_id = None
         result = None
@@ -167,6 +188,11 @@ def parse_result(provider, output):
     if not isinstance(session_id, str) or not isinstance(result, dict):
         raise RunError("The runner returned an incomplete session result.")
     session_id = str(UUID(session_id))
+    return session_id, result
+
+
+def parse_result(provider, output):
+    session_id, result = parse_response(provider, output)
     clean = {"summary": required_text(result, "summary", 4000)}
     for name, fields in RESULT_FIELDS.items():
         proposal = result.get(name)

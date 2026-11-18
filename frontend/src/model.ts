@@ -39,6 +39,29 @@ export interface DecisionDraft {
 export interface Decision extends DecisionDraft {
   id: string;
   accepted_on: string;
+  citations?: SessionCitation[];
+}
+
+export interface SessionCitation {
+  reference: string;
+  quote: string;
+  session: string;
+  role: "user" | "assistant";
+}
+
+export interface SessionEvidence {
+  excerpts: { reference: string; session: string; role: string; text: string }[];
+  coverage: { session: string; title: string; excerpts: number; note: string }[];
+}
+
+export interface SessionReview {
+  id: string;
+  provider: SessionSource;
+  stale: boolean;
+  decisions: { id: string; choice: string; rationale: string; supersedes: string | null; citations: SessionCitation[] }[];
+  evals: (EvalDraft & { id: string })[];
+  notes: string;
+  coverage: SessionEvidence["coverage"];
 }
 
 export interface EvalDraft {
@@ -75,6 +98,7 @@ export interface Project extends ProjectFields, ProjectReminder {
   decisions: Decision[];
   evals: KickoffEval[];
   kickoff: string;
+  session_review: SessionReview | null;
 }
 
 export interface Pattern {
@@ -128,18 +152,22 @@ export interface OutboxRun {
   review: Partial<Record<Proposal, "pending" | "accepted" | "dismissed">>;
 }
 
-export interface WorkspaceSuggestion {
+export interface ProjectSuggestion {
+  id: string;
   workspace: string;
   name: string;
   sessions: string[];
   sources: SessionSource[];
+  reason: string;
+  updated: number;
+  dismissed: boolean;
 }
 
 export interface DashboardState {
   projects: Project[];
   sessions: Session[];
   statuses: string[];
-  suggestions: WorkspaceSuggestion[];
+  suggestions: ProjectSuggestion[];
   sources: Record<SessionSource, { count: number; note: string }>;
   scanned: number;
   demo: boolean;
@@ -155,12 +183,21 @@ export type ProjectStateChange = { status: string } | { archived: boolean };
 
 export interface ProjectDraft extends ProjectFields, ProjectReminder {
   id?: string;
+  suggestion?: string;
   workspace?: string;
   sessions?: string[];
 }
 
+export interface ProjectDraftRequest {
+  provider: SessionSource;
+  suggestion?: string;
+  sessions: string[];
+  fields: ProjectFields;
+}
+
 export interface ProjectContext {
   name?: string;
+  suggestion?: string;
   label: string;
   workspace?: string;
   sessions: string[];

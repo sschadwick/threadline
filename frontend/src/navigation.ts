@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export const views = ["projects", "attention", "revisit", "archive", "inbox", "patterns", "outbox"] as const;
+export const views = ["projects", "suggestions", "attention", "revisit", "archive", "inbox", "patterns", "outbox"] as const;
 export type View = typeof views[number];
 
 function subscribe(listener: () => void) {

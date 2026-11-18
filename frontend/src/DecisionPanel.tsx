@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "./api";
 import { FormDialog } from "./Dialogs";
 import { KickoffEvals } from "./KickoffEvals";
+import { SessionCitations } from "./SessionCitations";
 import { dateLabel, sourceNames, type ApplyDashboardChange, type Decision, type Project, type Session } from "./model";
 
 type Editor = { kind: "decision"; previous?: Decision } | { kind: "eval"; decision: Decision };
@@ -35,6 +36,7 @@ export function DecisionPanel({ project, sessions, onApply }: Props) {
             <h3>{decision.choice}</h3>
             <p>{decision.rationale}</p>
             <p className="muted"><strong>Source</strong> {decision.source}</p>
+            {decision.citations && <SessionCitations citations={decision.citations} />}
             {previous && <p className="muted"><strong>Supersedes</strong> {previous.choice}</p>}
             {!retired && <div className="decision-actions">
               <button className="button secondary" type="button"

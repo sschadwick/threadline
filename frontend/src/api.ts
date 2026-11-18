@@ -1,9 +1,11 @@
 import type {
-  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectStateChange, Proposal, ReviewAction,
+  DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectDraftRequest, ProjectFields,
+  ProjectStateChange, Proposal, ReviewAction, SessionEvidence, SessionSource,
 } from "./model";
 
-async function request<T = DashboardState>(path: string, body?: object): Promise<T> {
-  const response = await fetch(path, body === undefined ? {} : {
+async function request<T = DashboardState>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, body === undefined ? { signal } : {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -17,6 +19,8 @@ export const api = {
   load: () => request("/api/state"),
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
+  draftProject: (context: ProjectDraftRequest, signal: AbortSignal) => request<ProjectFields>("/api/project-draft", context, signal),
+  reviewSuggestion: (suggestion: string, dismissed: boolean) => request("/api/suggestion", { suggestion, dismissed }),
   setProjectState: (id: string, change: ProjectStateChange) => request("/api/project-state", { id, ...change }),
   setContinuation: (id: string, session: string | null) => request("/api/project-pin", { id, session }),
   linkSession: (session: string, id: string | null) => request("/api/link", { session, id }),
@@ -29,4 +33,9 @@ export const api = {
   }),
   review: (run: string, proposal: Proposal, action: ReviewAction) => request("/api/review", { run, proposal, action }),
   acknowledge: (run: string) => request("/api/run-acknowledge", { run }),
+  sessionEvidence: (project: string, sessions: string[]) => request<SessionEvidence>("/api/session-review-context", { project, sessions }),
+  analyzeSessions: (project: string, provider: SessionSource, sessions: string[]) => request("/api/session-review", { project, provider, sessions }),
+  applySessionReview: (project: string, review: string, decisions: string[], evals: string[]) =>
+    request("/api/session-review-apply", { project, review, decisions, evals }),
+  dismissSessionReview: (project: string, review: string) => request("/api/session-review-dismiss", { project, review }),
 };

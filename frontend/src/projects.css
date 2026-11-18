@@ -109,3 +109,31 @@ select#sort { font-size: 11px; width: 96px; min-height: 31px; padding: 3px; }
 .eval-result ul { margin: 4px 0 7px; padding-inline-start: 16px; }
 .eval-result summary { cursor: pointer; color: var(--accent); }
 .eval-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow: auto; }
+.suggestion-item { padding: 16px; border-top: 1px solid var(--line-soft); overflow-wrap: anywhere; }
+.suggestion-item h3 { margin: 0 0 5px; font-size: 16px; }
+.suggestion-item p, .suggestion-item small { font-size: 12px; }
+.suggestion-item .cwd { font: 10px/1.5 var(--mono); color: var(--faint); }
+.suggestion-item details { margin-top: 10px; font-size: 12px; }
+.suggestion-item summary { color: var(--accent); cursor: pointer; min-height: 28px; }
+.suggestion-item ul { padding-left: 18px; margin: 4px 0 12px; }
+.suggestion-item li { padding: 5px 0; }
+.suggestion-item small { display: block; color: var(--muted); }
+.suggestion-sessions { border: 1px solid var(--line); border-radius: 5px; margin: 12px 0; max-height: 240px; overflow: auto; }
+.suggestion-sessions label { display: flex; align-items: start; gap: 8px; font-size: 12px; }
+.suggestion-sessions small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.suggestion-sessions input { flex: 0 0 auto; width: auto; accent-color: var(--accent); }
+.session-analysis { border-top: 1px solid var(--line); padding-top: 16px; }
+.session-analysis label { font-size: 12px; }
+.session-analysis summary { font-size: 12px; color: var(--accent); cursor: pointer; padding-block: 6px; }
+.analysis-selection fieldset { margin: 6px 0; border: 1px solid var(--line); min-width: 0; max-height: 240px; overflow: auto; }
+.analysis-selection label, .proposal-choice { display: flex; align-items: start; gap: 8px; padding-block: 5px; overflow-wrap: anywhere; }
+.analysis-selection small { display: block; color: var(--muted); }
+.session-analysis input[type=checkbox] { flex: 0 0 auto; accent-color: var(--accent); }
+.session-analysis .workflow-actions { align-items: end; }
+.session-analysis .workflow-actions label { display: grid; gap: 3px; }
+.analysis-evidence { max-height: 360px; overflow: auto; }
+.analysis-evidence blockquote, .session-citations blockquote { margin: 6px 0; border-left: 2px solid var(--line); padding-left: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.analysis-evidence p, .session-citations p { font-size: 12px; }
+.session-citations small, .session-citations a { display: block; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.session-proposals { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.session-proposals h3 { font-size: 14px; margin: 0; }
