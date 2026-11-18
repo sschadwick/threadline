@@ -139,3 +139,7 @@ class RunnerTest(unittest.TestCase):
         run = restarted.launch(request)["outbox"][0]
         self.assertEqual(run["status"], "interrupted")
         self.assertEqual(len(self.runner.calls), 1)
+        restarted.acknowledge({"run": run["id"]})
+        retained = self.make_tracker().snapshot()["outbox"][0]
+        self.assertTrue(retained["acknowledged"])
+        self.assertEqual(retained["status"], "interrupted")

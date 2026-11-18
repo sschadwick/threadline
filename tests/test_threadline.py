@@ -73,6 +73,25 @@ class ThreadlineTest(unittest.TestCase):
         self.assertEqual(restored["projects"][0]["id"], project_id)
         self.assertEqual(restored["projects"][0]["sessions"], [f"claude:{CLAUDE_ID}"])
 
+    def test_continuation_pin_survives_restart_and_clears_when_unlinked(self):
+        self.write_logs()
+        tracker = self.tracker()
+        session_key = f"claude:{CLAUDE_ID}"
+        tracker.snapshot()
+        first = tracker.change("/api/project", {
+            "name": "Example", "status": "Prototype", "sessions": [session_key],
+        })["savedProject"]
+        second = tracker.change("/api/project", {"name": "Other", "status": "Planned"})["savedProject"]
+        with self.assertRaisesRegex(ValueError, "linked"):
+            tracker.change("/api/project-pin", {"id": second, "session": session_key})
+        tracker.change("/api/project-pin", {"id": first, "session": session_key})
+        tracker = self.tracker()
+        self.assertEqual(next(p for p in tracker.snapshot()["projects"] if p["id"] == first)["continuation_session"],
+                         session_key)
+        tracker.change("/api/link", {"session": session_key, "id": second})
+        tracker.change("/api/link", {"session": session_key, "id": first})
+        self.assertIsNone(next(p for p in self.tracker().snapshot()["projects"] if p["id"] == first)["continuation_session"])
+
     def test_revisit_uses_project_activity_and_status(self):
         tracker = self.tracker()
         tracker.snapshot()

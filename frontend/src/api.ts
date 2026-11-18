@@ -18,6 +18,7 @@ export const api = {
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),
   setProjectState: (id: string, change: ProjectStateChange) => request("/api/project-state", { id, ...change }),
+  setContinuation: (id: string, session: string | null) => request("/api/project-pin", { id, session }),
   linkSession: (session: string, id: string | null) => request("/api/link", { session, id }),
   saveDecision: (id: string, draft: DecisionDraft) => request("/api/decision", { id, ...draft }),
   saveEval: (id: string, draft: EvalDraft) => request("/api/eval", { id, ...draft }),
@@ -27,4 +28,5 @@ export const api = {
     ...draft, digest: preview.digest, request_id: preview.request_id,
   }),
   review: (run: string, proposal: Proposal, action: ReviewAction) => request("/api/review", { run, proposal, action }),
+  acknowledge: (run: string) => request("/api/run-acknowledge", { run }),
 };

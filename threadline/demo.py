@@ -75,6 +75,7 @@ def demo_content(today=None):
         when = int(datetime.combine(day(age), datetime.min.time()).timestamp())
         row = session(source, identity, label, cwd, when, age >= 18)
         row["workspace"] = cwd
+        row["activity"] = {0: "needs_input", 1: "working", 3: "idle"}.get(age, "saved")
         rows.append(row)
     rows.sort(key=lambda row: row["updated"], reverse=True)
     return projects, rows

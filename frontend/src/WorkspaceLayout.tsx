@@ -7,6 +7,10 @@ const pages: Record<View, { label: string; title: string; description: string; s
     label: "Projects", title: "AI projects", symbol: "▤",
     description: "Pick up where you left off across Claude Code and Codex.",
   },
+  attention: {
+    label: "Needs attention", title: "Needs attention", symbol: "!",
+    description: "Sessions waiting for input, run failures, and proposals ready for review.",
+  },
   revisit: {
     label: "Revisit", title: "Projects to revisit", symbol: "◷",
     description: "Scheduled follow-ups and open projects with 14 days of inactivity.",
@@ -32,6 +36,7 @@ const pages: Record<View, { label: string; title: string; description: string; s
 interface Props {
   view: View;
   projectPage: boolean;
+  attentionCount: number;
   data?: DashboardState;
   refreshing: boolean;
   onNavigate: (view: View) => void;
@@ -40,7 +45,8 @@ interface Props {
   children: ReactNode;
 }
 
-export function WorkspaceLayout({ view, projectPage, data, refreshing, onNavigate, onRefresh, onNewProject, children }: Props) {
+export function WorkspaceLayout({ view, projectPage, attentionCount, data, refreshing,
+  onNavigate, onRefresh, onNewProject, children }: Props) {
   const active = pages[view];
   const stale = data?.projects.filter((project) => project.revisit).length || 0;
   const pending = data?.outbox.filter((run) => Object.values(run.review).includes("pending")).length || 0;
@@ -65,6 +71,7 @@ export function WorkspaceLayout({ view, projectPage, data, refreshing, onNavigat
             onClick={() => onNavigate(key)}>
             <span aria-hidden="true">{pages[key].symbol}</span> {pages[key].label}
             {key === "revisit" && stale > 0 && <small>{stale.toLocaleString()}</small>}
+            {key === "attention" && attentionCount > 0 && <small>{attentionCount.toLocaleString()}</small>}
             {key === "outbox" && pending > 0 && <small>{pending.toLocaleString()}</small>}
           </button>,
         )}

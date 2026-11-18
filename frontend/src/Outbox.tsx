@@ -8,13 +8,15 @@ const runLabels = { running: "Running", completed: "Completed", failed: "Failed"
 
 interface Props {
   data: DashboardState;
+  runId?: string;
   onApply: ApplyDashboardChange;
   onCopy: (text: string, confirmation: string) => void;
 }
 
-export function Outbox({ data, onApply, onCopy }: Props) {
+export function Outbox({ data, runId, onApply, onCopy }: Props) {
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+  const runs = runId ? data.outbox.filter((run) => run.id === runId) : data.outbox;
   async function review(run: string, proposal: Proposal, action: ReviewAction) {
     setPending(run);
     setError("");
@@ -29,9 +31,10 @@ export function Outbox({ data, onApply, onCopy }: Props) {
 
   return <section className="panel workflow-panel" aria-labelledby="runs-heading">
     <h2 id="runs-heading">Session runs</h2>
+    {runId && <a className="project-back" href="#/outbox">Show all runs</a>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    {data.outbox.length ? <ol className="outbox-list" aria-live="polite">
-      {data.outbox.map((run) => {
+    {runs.length ? <ol className="outbox-list" aria-live="polite">
+      {runs.map((run) => {
         const project = data.projects.find((item) => item.id === run.project);
         const pattern = data.patterns.find((item) => item.id === run.pattern);
         return <li key={run.id}>
@@ -56,7 +59,7 @@ export function Outbox({ data, onApply, onCopy }: Props) {
           })}
         </li>;
       })}
-    </ol> : <p className="muted">{data.runner.providers.length
+    </ol> : <p className="muted">{runId ? "This run is unavailable." : data.runner.providers.length
       ? "Start a session from Agentic Patterns to see its result here."
       : "Session launch is disabled. The Outbox shows results when a host runner is enabled."}</p>}
   </section>;

@@ -64,6 +64,19 @@ select#sort { font-size: 11px; width: 96px; min-height: 31px; padding: 3px; }
 .next { background: #242e20; border: 1px solid #3a4c31; border-left: 2px solid #b5d974; padding: 9px 10px; border-radius: 4px; }
 .next h2 { color: var(--accent); }
 .session-title { display: flex; align-items: center; gap: 7px; padding-bottom: 7px; border-bottom: 1px solid var(--line-soft); }
+.session-title { flex-wrap: wrap; }
+.session-title select { margin-left: auto; font-size: 11px; padding: 4px 6px; }
+.session-state.working { color: var(--accent); }
+.session-state.needs_input { color: #efbc7c; }
+.session-state.archived, .session-state.unknown { color: var(--muted); }
+.session-item .icon-button[aria-pressed="true"] { color: var(--accent); }
+.detail-meta a { color: var(--accent); }
+.continuation-section { margin-top: 16px; }
+.continuation-section p { margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.continuation-actions a, .attention-queue .workflow-actions a { text-decoration: none; }
+.attention-queue { display: grid; gap: 12px; }
+.attention-queue h2 a { font-size: inherit; }
+.attention-queue .session-item .session-info strong { font-size: 13px; }
 .session-item { display: flex; align-items: center; gap: 5px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); min-width: 0; }
 .session-info { min-width: 0; flex: 1; }
 .session-info strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }

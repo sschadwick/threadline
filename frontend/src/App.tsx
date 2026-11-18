@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { api } from "./api";
+import { AttentionQueue, projectAttention } from "./AttentionQueue";
 import { resumeCommand } from "./continuation";
 import { CopyDialog, LinkEditor, ProjectEditor } from "./Dialogs";
 import type { Project, ProjectContext, Session } from "./model";
@@ -51,8 +52,11 @@ export function App() {
     const session = sessionsByKey.get(key);
     return session ? [session] : [];
   }) : [];
+  const attention = data ? projectAttention(data) : [];
+  const attentionCount = attention.reduce((count, entry) => count + entry.sessions.length + entry.runs.length, 0);
+  const projectQueue = attention.find((entry) => entry.project.id === navigation.project);
 
-  return <WorkspaceLayout view={navigation.view} projectPage={Boolean(navigation.project)} data={data}
+  return <WorkspaceLayout view={navigation.view} projectPage={Boolean(navigation.project)} attentionCount={attentionCount} data={data}
     refreshing={refreshing} onNavigate={navigate}
     onRefresh={() => void refresh().then((ok) => { if (ok) notify("Session history refreshed"); })}
     onNewProject={() => setEditor({ kind: "project" })}>
@@ -62,16 +66,19 @@ export function App() {
       {navigation.view === "inbox" &&
         <SessionInbox key={navigation.hash} data={data} initialFilter={navigation.filter}
           onTrack={trackProject} {...sessionActions} />}
+      {navigation.view === "attention" && <AttentionQueue key={navigation.hash} groups={attention}
+        projectId={navigation.attentionProject} onApply={apply} {...sessionActions} />}
       {!navigation.project && (navigation.view === "projects" || navigation.view === "revisit" || navigation.view === "archive") &&
         <ProjectRegister key={navigation.hash} data={data} view={navigation.view} initialFilter={navigation.filter} />}
       {navigation.project && (project ?
         <ProjectDetails key={project.id} project={project} sessions={linked} statuses={data.statuses}
+          needsAttention={projectQueue ? projectQueue.sessions.length + projectQueue.runs.length : 0}
           onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply} onNotify={notify}
           onKickoff={(project) => navigate("patterns", undefined, project)} {...sessionActions} />
         : <div><h1>Project unavailable</h1><a className="project-back" href="#/projects">Back to projects</a></div>)}
       {navigation.view === "patterns" && <PatternLibrary key={navigation.hash} data={data} project={navigation.kickoffProject}
         onApply={apply} onCopy={copy} onLaunch={() => navigate("outbox")} />}
-      {navigation.view === "outbox" && <Outbox data={data} onApply={apply} onCopy={copy} />}
+      {navigation.view === "outbox" && <Outbox data={data} runId={navigation.outboxRun} onApply={apply} onCopy={copy} />}
       {editor?.kind === "project" &&
         <ProjectEditor project={editor.project} context={editor.context} statuses={data.statuses}
           onClose={closeEditor} onSave={async (draft) => {
