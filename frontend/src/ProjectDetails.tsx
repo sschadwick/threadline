@@ -3,6 +3,8 @@ import { api } from "./api";
 import { ContinueProject } from "./ContinueProject";
 import { DecisionPanel } from "./DecisionPanel";
 import { LinkedSessions } from "./LinkedSessions";
+import { SessionAnalysis } from "./SessionAnalysis";
+import type { SessionSource } from "./model";
 import { dateLabel, errorText, type ApplyDashboardChange, type DashboardState, type Project, type Session } from "./model";
 import { attentionHref } from "./navigation";
 import { RevisitMark } from "./ProjectStatus";
@@ -12,6 +14,7 @@ interface Props extends SessionActions {
   project: Project;
   sessions: Session[];
   statuses: string[];
+  providers: SessionSource[];
   needsAttention: number;
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
@@ -20,7 +23,7 @@ interface Props extends SessionActions {
   onNotify: (message: string) => void;
 }
 
-export function ProjectDetails({ project, sessions, statuses, needsAttention,
+export function ProjectDetails({ project, sessions, statuses, providers, needsAttention,
   onEdit, onCopy, onKickoff, onApply, onNotify, onLink, onResume }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -89,6 +92,7 @@ export function ProjectDetails({ project, sessions, statuses, needsAttention,
           <p>{project.next || "No next action recorded."}</p>
         </section>
         <ContinueProject project={project} pinned={pinned} onCopy={onCopy} onResume={onResume} onKickoff={onKickoff} />
+        <SessionAnalysis project={project} sessions={sessions} providers={providers} onApply={onApply} />
         <DecisionPanel project={project} sessions={sessions} onApply={onApply} />
       </div>
       <LinkedSessions sessions={sessions} pinned={pinned} saving={saving} onPin={(key) => void changeProject(

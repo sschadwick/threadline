@@ -39,6 +39,29 @@ export interface DecisionDraft {
 export interface Decision extends DecisionDraft {
   id: string;
   accepted_on: string;
+  citations?: SessionCitation[];
+}
+
+export interface SessionCitation {
+  reference: string;
+  quote: string;
+  session: string;
+  role: "user" | "assistant";
+}
+
+export interface SessionEvidence {
+  excerpts: { reference: string; session: string; role: string; text: string }[];
+  coverage: { session: string; title: string; excerpts: number; note: string }[];
+}
+
+export interface SessionReview {
+  id: string;
+  provider: SessionSource;
+  stale: boolean;
+  decisions: { id: string; choice: string; rationale: string; supersedes: string | null; citations: SessionCitation[] }[];
+  evals: (EvalDraft & { id: string })[];
+  notes: string;
+  coverage: SessionEvidence["coverage"];
 }
 
 export interface EvalDraft {
@@ -75,6 +98,7 @@ export interface Project extends ProjectFields, ProjectReminder {
   decisions: Decision[];
   evals: KickoffEval[];
   kickoff: string;
+  session_review: SessionReview | null;
 }
 
 export interface Pattern {

@@ -24,6 +24,8 @@ from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, repla
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
 from .project_draft import prepare_draft, validate_draft
 from .runner import PROVIDERS, RunError, Runner
+from .session_evidence import session_evidence
+from .session_review import SCHEMA as REVIEW_SCHEMA, apply_review, fingerprint, prompt_for, select_context, validate_review
 
 WEB = files("threadline").joinpath("web")
 STATUSES = ("In progress", "In production", "Prototype", "Planned", "Blocked", "Parked", "Completed")
@@ -51,16 +53,23 @@ class Tracker:
         self.overrides = {}
         self.runs = []
         self.dismissed_suggestions = []
+        self.session_reviews = {}
         if data.exists():
             try:
                 state = json.loads(data.read_text(encoding="utf-8"))
                 self.projects, self.overrides = state["projects"], state["overrides"]
                 self.runs = state.get("runs", [])
                 self.dismissed_suggestions = state.get("dismissed_suggestions", [])
+                self.session_reviews = state.get("session_reviews", {})
                 if (not isinstance(self.projects, list) or not isinstance(self.overrides, dict)
                         or not isinstance(self.runs, list)
                         or not isinstance(self.dismissed_suggestions, list)
                         or any(not isinstance(value, str) for value in self.dismissed_suggestions)
+                        or not isinstance(self.session_reviews, dict)
+                        or any(not isinstance(value, dict) or not {"id", "fingerprint", "provider", "decisions", "evals", "coverage", "notes"} <= value.keys()
+                               or any(not isinstance(value[key], list) for key in ("decisions", "evals", "coverage"))
+                               or any(not isinstance(value[key], str) for key in ("id", "fingerprint", "provider", "notes"))
+                               for value in self.session_reviews.values())
                         or any(not isinstance(run, dict) or not set(RUN_FIELDS).issubset(run)
                                or not {"digest", "checkpoint"} <= run.keys() for run in self.runs)
                         or any(value is not None and not isinstance(value, str) for value in self.overrides.values())):
@@ -118,6 +127,7 @@ class Tracker:
             updated = max([int(checkpoint), *(s["updated"] for s in linked)])
             reminder = revisit_state(project, updated, self.scanned)
             decisions = project.get("decisions", [])
+            review = self.session_reviews.get(project["id"])
             fields = {k: project[k] for k in (*FIELDS, "status", "id", "checkpoint")}
             projects.append({**fields, "updated": updated,
                              "revisit": reminder in ("due", "inactive"), "revisit_state": reminder,
@@ -128,6 +138,8 @@ class Tracker:
                              "workspaces": sorted(set(project["roots"]) | {row["workspace"] for row in linked if row["workspace"]}),
                              "sessions": [row["key"] for row in linked],
                              "decisions": decisions,
+                             "session_review": {**review, "stale": review["fingerprint"] != fingerprint(project, [row["key"] for row in linked])}
+                             if review and not review.get("applied") else None,
                              "evals": [eval_summary(case) for case in project.get("evals", [])],
                              "kickoff": render_kickoff(project, linked, decisions)})
         projects.sort(key=lambda p: p["updated"], reverse=True)
@@ -138,15 +150,16 @@ class Tracker:
                 "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False)}
                            for run in reversed(self.runs)]}
 
-    def save(self, projects, overrides, runs=None, *, dismissed_suggestions=None):
+    def save(self, projects, overrides, runs=None, *, dismissed_suggestions=None, session_reviews=None):
         runs = self.runs if runs is None else runs
         dismissed_suggestions = self.dismissed_suggestions if dismissed_suggestions is None else dismissed_suggestions
+        session_reviews = self.session_reviews if session_reviews is None else session_reviews
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=self.path.parent, prefix=".threadline-")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 json.dump({"projects": projects, "overrides": overrides, "runs": runs,
-                           "dismissed_suggestions": dismissed_suggestions}, stream, ensure_ascii=False, indent=2)
+                           "dismissed_suggestions": dismissed_suggestions, "session_reviews": session_reviews}, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(name, self.path)
@@ -154,6 +167,7 @@ class Tracker:
             Path(name).unlink(missing_ok=True)
         self.projects, self.overrides, self.runs = projects, overrides, runs
         self.dismissed_suggestions = dismissed_suggestions
+        self.session_reviews = session_reviews
 
     def preview(self, data):
         project = next((p for p in self.projects if p["id"] == data.get("project")), None)
@@ -183,6 +197,63 @@ class Tracker:
             return validate_draft(result, STATUSES)
         finally:
             self.draft_lock.release()
+
+    def review_context(self, data):
+        if self.demo:
+            raise ValueError("Session analysis is unavailable in demo mode.")
+        with self.lock:
+            project, rows = select_context(data, self.snapshot())
+        return project, session_evidence(rows, self.codex, self.claude)
+
+    def analyze_sessions(self, data):
+        if not self.draft_lock.acquire(blocking=False):
+            raise RunError("An AI request is already running. Try again shortly.")
+        try:
+            with self.lock:
+                provider = data.get("provider")
+                if not isinstance(provider, str) or provider not in self.runner.options()["providers"]:
+                    raise ValueError("Choose an enabled AI provider.")
+                project, rows = select_context(data, self.snapshot())
+                original = next(item for item in self.projects if item["id"] == project["id"])
+                baseline = fingerprint(original, project["sessions"])
+            if self.demo:
+                raise ValueError("Session analysis is unavailable in demo mode.")
+            evidence = session_evidence(rows, self.codex, self.claude)
+            prompt = prompt_for(project, evidence)
+            try:
+                result = self.runner.draft(provider, prompt, REVIEW_SCHEMA)
+                clean = validate_review(result, project, evidence)
+            except OSError as error:
+                raise RunError("Could not start the session-analysis provider.") from error
+            except (ValueError, TypeError, KeyError) as error:
+                raise RunError("The agent returned an invalid session review. Nothing was applied.") from error
+            review = {**clean, "id": uuid4().hex, "fingerprint": baseline, "provider": provider}
+            with self.lock:
+                self.save(self.projects, self.overrides, session_reviews={**self.session_reviews, project["id"]: review})
+        finally:
+            self.draft_lock.release()
+        with self.lock:
+            return self.snapshot()
+
+    def apply_session_review(self, path, data):
+        project = next((item for item in self.projects if item["id"] == data.get("project")), None)
+        review = self.session_reviews.get(project["id"]) if project else None
+        if project is None or project.get("archived") or review is None or review["id"] != data.get("review"):
+            raise ValueError("Choose a current session review for an active project.")
+        reviews = dict(self.session_reviews)
+        if path == "/api/session-review-dismiss":
+            reviews.pop(project["id"])
+            self.save(self.projects, self.overrides, session_reviews=reviews)
+        else:
+            snapshot = next(item for item in self.snapshot()["projects"] if item["id"] == project["id"])
+            linked = {row["key"]: row for row in self.rows if row["key"] in snapshot["sessions"]}
+            updated, applied = apply_review(data, review, project, linked)
+            if review.get("applied"):
+                return self.snapshot()
+            reviews[project["id"]] = applied
+            projects = [updated if item["id"] == project["id"] else item for item in self.projects]
+            self.save(projects, self.overrides, session_reviews=reviews)
+        return self.snapshot()
 
     def launch(self, data):
         request_id = data.get("request_id")
@@ -272,6 +343,8 @@ class Tracker:
         return self.snapshot()
 
     def change(self, path, data):
+        if path in ("/api/session-review-apply", "/api/session-review-dismiss"):
+            return self.apply_session_review(path, data)
         if path == "/api/suggestion":
             identity, dismissed = data.get("suggestion"), data.get("dismissed")
             if not isinstance(identity, str) or not isinstance(dismissed, bool):
@@ -448,7 +521,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.partition("?")[0]
         if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
                         "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge",
-                        "/api/suggestion", "/api/project-draft"):
+                        "/api/suggestion", "/api/project-draft", "/api/session-review", "/api/session-review-context",
+                        "/api/session-review-apply", "/api/session-review-dismiss"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -461,6 +535,12 @@ class Handler(BaseHTTPRequestHandler):
             tracker = self.server.tracker
             if path == "/api/project-draft":
                 self.send_json(200, tracker.draft_project(data))
+                return
+            if path == "/api/session-review-context":
+                self.send_json(200, tracker.review_context(data)[1])
+                return
+            if path == "/api/session-review":
+                self.send_json(200, tracker.analyze_sessions(data))
                 return
             with tracker.lock:
                 if path == "/api/refresh":
