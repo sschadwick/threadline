@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "./api";
 import { errorText, sourceNames, type ApplyDashboardChange, type DashboardState, type OutboxRun, type Project,
   type Session } from "./model";
-import { attentionHref, projectHref } from "./navigation";
+import { attentionHref, projectHref, roadmapHref } from "./navigation";
 import { SessionCard, type SessionActions } from "./SessionCard";
 import { sessionStatus } from "./sessionStatus";
 
@@ -12,7 +12,7 @@ export function projectAttention(data: DashboardState) {
     const runs = data.outbox.filter((run) => run.project === project.id && (
       Object.values(run.review).includes("pending") || (needsAcknowledgement(run) && !run.acknowledged)
     ));
-    return sessions.length || runs.length ? [{ project, sessions, runs }] : [];
+    return sessions.length || runs.length || (!project.archived && project.roadmap_attention.length) ? [{ project, sessions, runs }] : [];
   });
 }
 
@@ -49,6 +49,12 @@ export function AttentionQueue({ groups, projectId, onApply, onLink, onResume }:
     {visible.length ? visible.map(({ project, sessions, runs }) =>
       <section key={project.id} className="panel workflow-panel">
         <h2><a className="project-back" href={projectHref(project.id)}>{project.name}</a></h2>
+        {!project.archived && project.roadmap_attention.length > 0 && <ul className="outbox-list">
+          {project.roadmap_attention.map((entry) => <li key={entry.kind + (entry.item || entry.milestone)}>
+            <a href={roadmapHref(project.id, entry.milestone, entry.item, entry.kind === "review")}>{entry.title}</a>
+            <p className="small muted">{entry.target}</p>
+          </li>)}
+        </ul>}
         {sessions.map((session) => <SessionCard key={session.key} session={session} onLink={onLink} onResume={onResume} />)}
         {runs.length > 0 && <ul className="outbox-list">
           {runs.map((run) => <li key={run.id}>

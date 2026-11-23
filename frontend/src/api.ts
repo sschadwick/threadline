@@ -16,6 +16,8 @@ async function request<T = DashboardState>(path: string, body?: object, signal?:
 }
 
 export const api = {
+  roadmap: (project: string, change: object) => request("/api/roadmap", { project, ...change }),
+  analyzeProgress: (project: string, context: object) => request("/api/roadmap-analyze", { project, ...context }),
   load: () => request("/api/state"),
   refresh: () => request("/api/refresh", {}),
   saveProject: (draft: ProjectDraft) => request("/api/project", draft),

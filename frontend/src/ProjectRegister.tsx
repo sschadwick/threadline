@@ -28,7 +28,7 @@ export function ProjectRegister({ data, view, initialFilter }: Props) {
   const query = search.trim().toLowerCase();
   const matches = candidates.filter((project) =>
     matchesFilter(project, activeFilter) &&
-    [project.name, project.area, project.summary, project.next].some((value) => value.toLowerCase().includes(query)),
+    [project.name, project.area, project.summary, project.next_action.title].some((value) => value.toLowerCase().includes(query)),
   );
   if (order === "oldest") matches.reverse();
   if (order === "name") matches.sort((a, b) => a.name.localeCompare(b.name));
@@ -52,6 +52,7 @@ export function ProjectRegister({ data, view, initialFilter }: Props) {
           <span className={"tile " + statusClass[project.status]} aria-hidden="true">{initials(project.name)}</span>
           <span><strong>{project.name}</strong>
             <small>{project.area || "General"} · {project.sessions.length} {project.sessions.length === 1 ? "session" : "sessions"}</small>
+            {!project.archived && <small className="roadmap-register-next">Next · {project.next_action.title}</small>}
           </span>
         </span>
         <span><ProjectStatus project={project} /></span>
