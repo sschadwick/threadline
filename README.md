@@ -22,7 +22,7 @@ Run the archive without `--demo` or run `python3 -m threadline` from the checkou
 
 1. Open **Suggested projects** to review untracked checkouts and directories with related sessions. Each suggestion shows its source, path, and supporting sessions.
 2. Choose **Track project**, review the name and select the sessions to link, then confirm. Discovery never creates projects on its own. **Dismiss** hides a suggestion across refreshes and restarts; restore it from the **Dismissed** filter. You can also create a project or link individual sessions from **Session inbox**.
-3. Record a checkpoint and a next action when you stop work. **Revisit** surfaces open projects after 14 days without a checkpoint or linked-session activity.
+3. Record a checkpoint and a next action when you stop work. **Revisit** surfaces open projects after 14 days without a checkpoint, roadmap progress, or linked-session activity.
 4. When you return, copy a resume command for an existing session or a continuation brief for a new one.
 
 ![The session inbox showing unlinked Claude Code and Codex conversations with controls to attach them to projects](docs/images/inbox.png)
@@ -42,6 +42,14 @@ Analysis samples the beginning and recent dialogue of local, uncompressed Codex 
 Threadline reads live Claude Code status from `claude agents --json --all` when the CLI is available. Use `--codex-socket /path/to/socket` to read live state from an existing local Codex App Server. That socket provides the status of sessions loaded by that server. The saved Codex history provides archive state. Claude Code archive state depends on the client that manages the session, and Threadline displays the live or saved status it can verify. [Claude Code Agent View](https://code.claude.com/docs/en/agent-view#list-sessions-as-json) · [Codex App Server](https://learn.chatgpt.com/docs/app-server#threads)
 
 Choose **Save as eval** on a decision and enter a kickoff task. **Replay kickoff** checks that a brief built from the saved snapshot includes the expected decision and evidence and excludes superseded revisions. The replay runs locally and does not call a model.
+
+## Roadmap and progress
+
+Open a project to add ordered milestones with an outcome and success criteria. Activate one milestone at a time. Add work items for independently resumable work, record blockers or dependencies, and link evidence from Claude Code, Codex, and external artifacts. Mark a milestone progress update as completion evidence to make it eligible for sign-off once its work items are done.
+
+**What’s next?** uses the active milestone, pending reviews, and available work to surface the next action. The register shows the same action, and the project continuation brief carries it into a fresh session. **Needs attention** links to pending progress reviews, blocked work items, and milestones awaiting sign-off.
+
+From a milestone or work item, open **Draft progress from sessions** to select linked sessions and preview their local excerpts. Choose **Draft update** to send the sampled dialogue to an enabled provider. Review the cited result, edit or omit suggested field changes, then accept or dismiss it. Accepted updates go into the record’s history. Session reports and linked artifact references are reviewed by the user.
 
 ## Kick off a session
 

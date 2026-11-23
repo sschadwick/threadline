@@ -7,6 +7,7 @@ import { SessionAnalysis } from "./SessionAnalysis";
 import type { SessionSource } from "./model";
 import { dateLabel, errorText, type ApplyDashboardChange, type DashboardState, type Project, type Session } from "./model";
 import { attentionHref } from "./navigation";
+import { NextActionCard, ProjectRoadmap } from "./ProjectRoadmap";
 import { RevisitMark } from "./ProjectStatus";
 import type { SessionActions } from "./SessionCard";
 
@@ -16,6 +17,7 @@ interface Props extends SessionActions {
   statuses: string[];
   providers: SessionSource[];
   needsAttention: number;
+  focus?: string;
   onEdit: (project: Project) => void;
   onCopy: (content: string, confirmation: string) => void;
   onKickoff: (project: string) => void;
@@ -23,7 +25,7 @@ interface Props extends SessionActions {
   onNotify: (message: string) => void;
 }
 
-export function ProjectDetails({ project, sessions, statuses, providers, needsAttention,
+export function ProjectDetails({ project, sessions, statuses, providers, needsAttention, focus,
   onEdit, onCopy, onKickoff, onApply, onNotify, onLink, onResume }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -34,6 +36,13 @@ export function ProjectDetails({ project, sessions, statuses, providers, needsAt
     window.scrollTo(0, 0);
     heading.current?.focus({ preventScroll: true });
   }, []);
+
+  useEffect(() => {
+    if (!focus?.startsWith("roadmap-") && !focus?.startsWith("progress-")) return;
+    const target = document.getElementById(focus);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "start" });
+  }, [focus]);
 
   useEffect(() => {
     document.title = project.name + " · Threadline";
@@ -80,6 +89,7 @@ export function ProjectDetails({ project, sessions, statuses, providers, needsAt
       </div>
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
+    <NextActionCard project={project} onCopy={onCopy} />
     <div className="layout project-content">
       <div className="panel detail-body">
         <section className="checkpoint">
@@ -87,10 +97,8 @@ export function ProjectDetails({ project, sessions, statuses, providers, needsAt
           <p>{project.summary || "No checkpoint recorded."}</p>
           <p className="evidence">{project.evidence && project.evidence + " · "}{dateLabel(project.checkpoint)}</p>
         </section>
-        <section className="next">
-          <h2>Next action</h2>
-          <p>{project.next || "No next action recorded."}</p>
-        </section>
+        <ProjectRoadmap project={project} sessions={sessions} providers={providers}
+          onApply={onApply} onResume={onResume} onCopy={onCopy} />
         <ContinueProject project={project} pinned={pinned} onCopy={onCopy} onResume={onResume} onKickoff={onKickoff} />
         <SessionAnalysis project={project} sessions={sessions} providers={providers} onApply={onApply} />
         <DecisionPanel project={project} sessions={sessions} onApply={onApply} />

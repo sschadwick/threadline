@@ -55,7 +55,9 @@ export function App() {
     return session ? [session] : [];
   }) : [];
   const attention = data ? projectAttention(data) : [];
-  const attentionCount = attention.reduce((count, entry) => count + entry.sessions.length + entry.runs.length, 0);
+  const attentionSize = (entry: typeof attention[number]) => entry.sessions.length + entry.runs.length
+    + (entry.project.archived ? 0 : entry.project.roadmap_attention.length);
+  const attentionCount = attention.reduce((count, entry) => count + attentionSize(entry), 0);
   const projectQueue = attention.find((entry) => entry.project.id === navigation.project);
 
   return <WorkspaceLayout view={navigation.view} projectPage={Boolean(navigation.project)} attentionCount={attentionCount} data={data}
@@ -76,7 +78,7 @@ export function App() {
       {navigation.project && (project ?
         <ProjectDetails key={project.id} project={project} sessions={linked} statuses={data.statuses}
           providers={data.demo ? [] : data.runner.providers}
-          needsAttention={projectQueue ? projectQueue.sessions.length + projectQueue.runs.length : 0}
+          needsAttention={projectQueue ? attentionSize(projectQueue) : 0} focus={navigation.projectFocus}
           onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply} onNotify={notify}
           onKickoff={(project) => navigate("patterns", undefined, project)} {...sessionActions} />
         : <div><h1>Project unavailable</h1><a className="project-back" href="#/projects">Back to projects</a></div>)}

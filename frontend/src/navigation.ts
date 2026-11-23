@@ -12,6 +12,12 @@ export function projectHref(id: string) {
   return "#/projects/" + encodeURIComponent(id);
 }
 
+export function roadmapHref(project: string, milestone: string | null, item: string | null = null, review = false) {
+  return projectHref(project) + "?focus=" + encodeURIComponent(
+    (review ? "progress-" : "roadmap-") + (item || milestone || "section"),
+  );
+}
+
 export function attentionHref(project?: string) {
   return "#/attention" + (project ? "?project=" + encodeURIComponent(project) : "");
 }
@@ -36,6 +42,7 @@ export function useNavigation() {
   return {
     hash, view, filter: query.get("filter") ?? undefined,
     project: segment === "projects" && id ? decodeProject(id) : undefined,
+    projectFocus: segment === "projects" ? query.get("focus") ?? undefined : undefined,
     kickoffProject: view === "patterns" ? query.get("project") ?? undefined : undefined,
     attentionProject: view === "attention" ? query.get("project") ?? undefined : undefined,
     outboxRun: view === "outbox" ? query.get("run") ?? undefined : undefined,

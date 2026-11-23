@@ -99,6 +99,9 @@ export interface Project extends ProjectFields, ProjectReminder {
   evals: KickoffEval[];
   kickoff: string;
   session_review: SessionReview | null;
+  roadmap: Milestone[];
+  roadmap_attention: RoadmapAttention[];
+  next_action: NextAction;
 }
 
 export interface Pattern {
@@ -175,6 +178,7 @@ export interface DashboardState {
   runner: { providers: SessionSource[]; workspaces: string[] };
   outbox: OutboxRun[];
   savedProject?: string;
+  progressNotice?: string;
 }
 
 export type ApplyDashboardChange = (request: Promise<DashboardState>) => Promise<DashboardState>;
@@ -223,3 +227,78 @@ export function dateLabel(date: string) {
 export function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Request failed.";
 }
+
+export type ItemStatus = "todo" | "in progress" | "blocked" | "done";
+export interface RoadmapLocation {
+  milestone: string;
+  item: string | null;
+}
+
+export interface RoadmapAttention extends RoadmapLocation {
+  kind: "review" | "blocked" | "signoff";
+  title: string;
+  target: string;
+}
+
+export interface NextAction {
+  kind: RoadmapAttention["kind"] | "activate" | "work" | "plan" | "legacy";
+  title: string;
+  reason: string;
+  milestone: string | null;
+  item: string | null;
+}
+
+export interface ProgressReview {
+  id: string;
+  provider: SessionSource;
+  stale: boolean;
+  summary: string;
+  next: string;
+  until: string;
+  status: ItemStatus | "";
+  blocker: string;
+  citations: SessionCitation[];
+}
+
+export interface ProgressUpdate {
+  id: string;
+  date: string;
+  summary: string;
+  source: "manual" | "session review";
+  session: string | null;
+  artifact: { url: string; label: string; revision: string; environment: string } | null;
+  citations: SessionCitation[];
+  changes: { next?: string; until?: string; status?: ItemStatus; blocker?: string };
+  completion_criteria?: string;
+}
+
+interface RoadmapRecord {
+  id: string;
+  revision: string;
+  title: string;
+  outcome: string;
+  next: string;
+  until: string;
+  sessions: string[];
+  updates: ProgressUpdate[];
+  review: ProgressReview | null;
+  blocked_by: string;
+  brief: string;
+}
+
+export interface WorkItem extends RoadmapRecord {
+  status: ItemStatus;
+  blocker: string;
+  depends_on: string | null;
+}
+
+export interface Milestone extends RoadmapRecord {
+  status: "planned" | "active" | "complete";
+  scope: string;
+  criteria: string;
+  completed_on?: string;
+  items: WorkItem[];
+  ready: boolean;
+}
+
+export type RoadmapTarget = Milestone | WorkItem;

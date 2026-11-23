@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 from contextlib import ExitStack
+from copy import deepcopy
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -23,6 +24,8 @@ from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
 from .project_draft import prepare_draft, validate_draft
+from .roadmap import (PROGRESS_SCHEMA, change_roadmap, continuation, next_action, progress_prompt,
+                      roadmap_view, target_for, validate_progress)
 from .runner import PROVIDERS, RunError, Runner
 from .session_evidence import session_evidence
 from .session_review import SCHEMA as REVIEW_SCHEMA, apply_review, fingerprint, prompt_for, select_context, validate_review
@@ -82,6 +85,8 @@ class Tracker:
                             or any(not isinstance(project[key], list) or any(not isinstance(value, str) for value in project[key])
                                    for key in ("aliases", "roots", "sessions"))):
                         raise ValueError("Invalid project")
+                    if not isinstance(project.get("roadmap", []), list):
+                        raise ValueError("Invalid roadmap")
                     date.fromisoformat(project["checkpoint"])
                     if project.pop("in_production", False) is True:
                         project["status"] = "In production"
@@ -124,11 +129,31 @@ class Tracker:
             linked = by_project[project["id"]]
             pin = project.get("continuation_session")
             checkpoint = datetime.fromisoformat(project["checkpoint"]).timestamp()
-            updated = max([int(checkpoint), *(s["updated"] for s in linked)])
+            progress_dates = (target["updates"][-1]["timestamp"] for milestone in project.get("roadmap", [])
+                              for target in (milestone, *milestone["items"]) if target["updates"])
+            updated = max(int(checkpoint), max((s["updated"] for s in linked), default=0),
+                          max(progress_dates, default=0))
             reminder = revisit_state(project, updated, self.scanned)
             decisions = project.get("decisions", [])
             review = self.session_reviews.get(project["id"])
             fields = {k: project[k] for k in (*FIELDS, "status", "id", "checkpoint")}
+            roadmap, attention = roadmap_view(project, {row["key"] for row in linked})
+            action = next_action(project, roadmap, attention)
+            kickoff = render_kickoff(project, linked, decisions)
+            for milestone in roadmap:
+                for target in (milestone, *milestone["items"]):
+                    selected = action["milestone"] == milestone["id"] and action["item"] == (
+                        None if target is milestone else target["id"]
+                    )
+                    target_action = action["title"] if selected else (
+                        "Review completed work" if target["status"] in ("done", "complete") else
+                        target["blocked_by"] or target["next"] or "Record the next action"
+                    )
+                    target["brief"] = continuation(project, milestone, target, target_action, linked, decisions)
+                    if selected:
+                        kickoff = target["brief"]
+            if action["kind"] == "plan" and action["milestone"] is None:
+                kickoff = render_kickoff({**project, "next": action["title"]}, linked, decisions)
             projects.append({**fields, "updated": updated,
                              "revisit": reminder in ("due", "inactive"), "revisit_state": reminder,
                              "archived": project.get("archived", False),
@@ -141,7 +166,8 @@ class Tracker:
                              "session_review": {**review, "stale": review["fingerprint"] != fingerprint(project, [row["key"] for row in linked])}
                              if review and not review.get("applied") else None,
                              "evals": [eval_summary(case) for case in project.get("evals", [])],
-                             "kickoff": render_kickoff(project, linked, decisions)})
+                             "roadmap": roadmap, "roadmap_attention": attention, "next_action": action,
+                             "kickoff": kickoff})
         projects.sort(key=lambda p: p["updated"], reverse=True)
         return {"projects": projects, "sessions": rows, "sources": self.sources,
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
@@ -234,6 +260,64 @@ class Tracker:
             self.draft_lock.release()
         with self.lock:
             return self.snapshot()
+
+    def analyze_progress(self, data):
+        if self.demo:
+            raise ValueError("Session analysis is unavailable in demo mode.")
+        if not self.draft_lock.acquire(blocking=False):
+            raise RunError("An AI request is already running. Try again shortly.")
+        try:
+            with self.lock:
+                provider = data.get("provider")
+                if not isinstance(provider, str) or provider not in self.runner.options()["providers"]:
+                    raise ValueError("Choose an enabled AI provider.")
+                project, rows = select_context(data, self.snapshot())
+                original = self.roadmap_project(data)
+                milestone, target = target_for(original.get("roadmap", []), data)
+                if milestone["status"] == "complete" or target["revision"] != data.get("revision"):
+                    raise ValueError("Choose a current record in an open milestone.")
+                baseline = target["revision"]
+                previous_review = target.get("review")
+            evidence = session_evidence(rows, self.codex, self.claude)
+            prompt = progress_prompt(project, milestone, target, evidence)
+            try:
+                result = self.runner.draft(provider, prompt, PROGRESS_SCHEMA)
+                clean = validate_progress(result, target, milestone, evidence)
+            except OSError as error:
+                raise RunError("Could not start the session-analysis provider.") from error
+            except (ValueError, TypeError, KeyError) as error:
+                raise RunError("The agent returned an invalid progress proposal or citation.") from error
+            with self.lock:
+                current = self.roadmap_project(data)
+                if clean is None:
+                    return {**self.snapshot(), "progressNotice": "No supported progress update was found."}
+                _, selected = select_context(data, self.snapshot())
+                updated = deepcopy(current)
+                milestone, target = target_for(updated["roadmap"], data)
+                if (milestone["status"] == "complete" or target["revision"] != baseline
+                        or target.get("review") != previous_review
+                        or [row["key"] for row in selected] != [row["key"] for row in rows]):
+                    raise ValueError("The record changed during analysis. Draft progress again.")
+                target["review"] = {**clean, "id": uuid4().hex, "revision": baseline, "provider": provider}
+                return self.save_roadmap(updated)
+        finally:
+            self.draft_lock.release()
+
+    def roadmap_project(self, data):
+        project = next((item for item in self.projects if item["id"] == data.get("project")), None)
+        if project is None or project.get("archived"):
+            raise ValueError("Choose an active project.")
+        return project
+
+    def save_roadmap(self, project):
+        self.save([project if item["id"] == project["id"] else item for item in self.projects], self.overrides)
+        return self.snapshot()
+
+    def update_roadmap(self, data):
+        project = deepcopy(self.roadmap_project(data))
+        linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
+        change_roadmap(project.setdefault("roadmap", []), data, {row["key"] for row in linked[project["id"]]})
+        return self.save_roadmap(project)
 
     def apply_session_review(self, path, data):
         project = next((item for item in self.projects if item["id"] == data.get("project")), None)
@@ -343,6 +427,8 @@ class Tracker:
         return self.snapshot()
 
     def change(self, path, data):
+        if path == "/api/roadmap":
+            return self.update_roadmap(data)
         if path in ("/api/session-review-apply", "/api/session-review-dismiss"):
             return self.apply_session_review(path, data)
         if path == "/api/suggestion":
@@ -522,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
         if path not in ("/api/project", "/api/project-state", "/api/link", "/api/refresh", "/api/decision", "/api/eval", "/api/replay",
                         "/api/kickoff", "/api/launch", "/api/review", "/api/project-pin", "/api/run-acknowledge",
                         "/api/suggestion", "/api/project-draft", "/api/session-review", "/api/session-review-context",
-                        "/api/session-review-apply", "/api/session-review-dismiss"):
+                        "/api/session-review-apply", "/api/session-review-dismiss", "/api/roadmap", "/api/roadmap-analyze"):
             self.send_json(404, {"error": "Page not found."})
             return
         try:
@@ -538,6 +624,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/session-review-context":
                 self.send_json(200, tracker.review_context(data)[1])
+                return
+            if path == "/api/roadmap-analyze":
+                self.send_json(200, tracker.analyze_progress(data))
                 return
             if path == "/api/session-review":
                 self.send_json(200, tracker.analyze_sessions(data))

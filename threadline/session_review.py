@@ -70,6 +70,21 @@ def prompt_for(project, evidence):
     )
 
 
+def validate_citations(citations, references):
+    if not isinstance(citations, list) or not 1 <= len(citations) <= 3:
+        raise ValueError("Missing citations")
+    clean = []
+    for citation in citations:
+        if not isinstance(citation, dict) or set(citation) != {"reference", "quote"}:
+            raise ValueError("Invalid citation")
+        reference, quote = required_text(citation, "reference", 200), required_text(citation, "quote", 800)
+        source = references.get(reference)
+        if source is None or quote not in source["text"]:
+            raise ValueError("Unsupported citation")
+        clean.append({"reference": reference, "quote": quote, "session": source["session"], "role": source["role"]})
+    return clean
+
+
 def validate_review(result, project, evidence):
     try:
         if not isinstance(result, dict) or set(result) != {"decisions", "evals", "notes"}:
@@ -96,17 +111,7 @@ def validate_review(result, project, evidence):
             if supersedes is not None and (not isinstance(supersedes, str) or supersedes not in active):
                 raise ValueError("Invalid superseded decision")
             citations = item["citations"]
-            if not isinstance(citations, list) or not 1 <= len(citations) <= 3:
-                raise ValueError("Missing citations")
-            clean = []
-            for citation in citations:
-                if not isinstance(citation, dict) or set(citation) != {"reference", "quote"}:
-                    raise ValueError("Invalid citation")
-                reference, quote = required_text(citation, "reference", 200), required_text(citation, "quote", 800)
-                source = references.get(reference)
-                if source is None or quote not in source["text"]:
-                    raise ValueError("Unsupported citation")
-                clean.append({"reference": reference, "quote": quote, "session": source["session"], "role": source["role"]})
+            clean = validate_citations(citations, references)
             if not any(citation["role"] == "user" for citation in clean):
                 raise ValueError("Decision lacks user evidence")
             normalized = normalize(choice)
