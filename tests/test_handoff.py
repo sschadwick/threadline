@@ -34,7 +34,7 @@ class HandoffTest(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        self.root = Path(directory.name)
+        self.root = Path(directory.name).resolve()
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
         git = ["git", "-C", str(self.workspace), "-c", "user.name=Test", "-c", "user.email=test@example.org"]
@@ -149,7 +149,7 @@ class HandoffTest(unittest.TestCase):
             self.candidate(commit=self.commit[:8])
         with self.assertRaisesRegex(ValueError, "linked producer session"):
             self.candidate(workspace=str(self.root))
-        with self.assertRaises(RunError):
+        with self.assertRaisesRegex(RunError, "Could not export the exact candidate commit"):
             self.runner.run({"provider": "claude", "workspace": str(self.workspace), "audit": {"commit": "0" * 40}})
         self.assertEqual(self.runner.attempts, [])
         self.assertEqual(reported_usage("codex", b'{"type":"turn.completed","usage":'
