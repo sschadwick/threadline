@@ -3,6 +3,7 @@ import { api } from "./api";
 import { resumeCommand } from "./continuation";
 import { errorText, shortDate, sourceNames, type ApplyDashboardChange, type DashboardState,
   type OutboxRun, type Proposal, type ReviewAction } from "./model";
+import { roadmapHref } from "./navigation";
 
 const runLabels = { running: "Running", completed: "Completed", failed: "Failed", interrupted: "Interrupted" };
 
@@ -17,11 +18,11 @@ export function Outbox({ data, runId, onApply, onCopy }: Props) {
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const runs = runId ? data.outbox.filter((run) => run.id === runId) : data.outbox;
-  async function review(run: string, proposal: Proposal, action: ReviewAction) {
+  async function review(run: string, proposal: Proposal | "audit", action: ReviewAction) {
     setPending(run);
     setError("");
     try {
-      await onApply(api.review(run, proposal, action));
+      await onApply(proposal === "audit" ? api.acceptAudit(run) : api.review(run, proposal, action));
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -37,6 +38,8 @@ export function Outbox({ data, runId, onApply, onCopy }: Props) {
       {runs.map((run) => {
         const project = data.projects.find((item) => item.id === run.project);
         const pattern = data.patterns.find((item) => item.id === run.pattern);
+        const item = project?.roadmap.find((milestone) => milestone.id === run.audit?.milestone)
+          ?.items.find((item) => item.id === run.audit?.item);
         return <li key={run.id}>
           <div className="outbox-title">
             <h3>{project?.name ?? "Project"} · {sourceNames[run.provider]}</h3>
@@ -47,7 +50,21 @@ export function Outbox({ data, runId, onApply, onCopy }: Props) {
           <p>{run.task}</p>
           {run.error && <p className="form-error">{run.error}</p>}
           {run.result && <p>{run.result.summary}</p>}
-          {run.session_id && <div className="workflow-actions">
+          {run.usage && <p className="muted">{run.usage.input_tokens.toLocaleString()} input · {run.usage.output_tokens.toLocaleString()} output tokens</p>}
+          {run.audit && <div className="outbox-proposal">
+            <h4>Candidate audit</h4>
+            <p><strong>Commit</strong> <code className="audit-commit">{run.audit.commit}</code></p>
+            {run.result?.verdict && <p><strong>Verdict</strong> {run.result.verdict}</p>}
+            {item && <a href={roadmapHref(run.project, run.audit.milestone, run.audit.item, "handoff")}>View handoff</a>}
+            {run.review.audit === "accepted" && <p className="muted">Accepted</p>}
+            {run.review.audit === "pending" && <div className="workflow-actions">
+              {!project?.archived && item?.status !== "done" && item?.audit?.run === run.id
+                ? <button type="button" className="button primary" disabled={Boolean(pending)}
+                    onClick={() => void review(run.id, "audit", "accept")}>Accept audit</button>
+                : <p className="muted">The handoff is closed or has changed.</p>}
+            </div>}
+          </div>}
+          {run.session_id && !run.audit && <div className="workflow-actions">
             <button type="button" className="button secondary" onClick={() => onCopy(resumeCommand({
               source: run.provider, id: run.session_id!, cwd: run.workspace,
             }), "Resume command copied")}>Copy resume command</button>

@@ -10,7 +10,7 @@ export function projectAttention(data: DashboardState) {
   return data.projects.flatMap((project) => {
     const sessions = data.sessions.filter((session) => session.project === project.id && sessionStatus(session) === "needs_input");
     const runs = data.outbox.filter((run) => run.project === project.id && (
-      Object.values(run.review).includes("pending") || (needsAcknowledgement(run) && !run.acknowledged)
+      run.review.checkpoint === "pending" || run.review.decision === "pending" || (needsAcknowledgement(run) && !run.acknowledged)
     ));
     return sessions.length || runs.length || (!project.archived && project.roadmap_attention.length) ? [{ project, sessions, runs }] : [];
   });
@@ -51,7 +51,8 @@ export function AttentionQueue({ groups, projectId, onApply, onLink, onResume }:
         <h2><a className="project-back" href={projectHref(project.id)}>{project.name}</a></h2>
         {!project.archived && project.roadmap_attention.length > 0 && <ul className="outbox-list">
           {project.roadmap_attention.map((entry) => <li key={entry.kind + (entry.item || entry.milestone)}>
-            <a href={roadmapHref(project.id, entry.milestone, entry.item, entry.kind === "review")}>{entry.title}</a>
+            <a href={roadmapHref(project.id, entry.milestone, entry.item,
+              entry.kind === "review" || entry.kind === "handoff" ? entry.kind : undefined)}>{entry.title}</a>
             <p className="small muted">{entry.target}</p>
           </li>)}
         </ul>}

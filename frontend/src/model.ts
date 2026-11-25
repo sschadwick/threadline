@@ -132,6 +132,10 @@ export interface KickoffPreview {
 
 export type Proposal = "checkpoint" | "decision";
 export type ReviewAction = "accept" | "dismiss";
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
 
 export interface OutboxRun {
   id: string;
@@ -147,12 +151,15 @@ export interface OutboxRun {
   session_id: string | null;
   result: {
     summary: string;
-    checkpoint: { summary: string; next: string; source: string } | null;
-    decision: { choice: string; rationale: string; source: string } | null;
+    checkpoint?: { summary: string; next: string; source: string } | null;
+    decision?: { choice: string; rationale: string; source: string } | null;
+    verdict?: "pass" | "changes requested";
   } | null;
   error: string;
   acknowledged: boolean;
-  review: Partial<Record<Proposal, "pending" | "accepted" | "dismissed">>;
+  review: Partial<Record<Proposal | "audit", "pending" | "accepted" | "dismissed">>;
+  audit: { milestone: string; item: string; commit: string } | null;
+  usage: TokenUsage | null;
 }
 
 export interface ProjectSuggestion {
@@ -235,7 +242,7 @@ export interface RoadmapLocation {
 }
 
 export interface RoadmapAttention extends RoadmapLocation {
-  kind: "review" | "blocked" | "signoff";
+  kind: "review" | "blocked" | "signoff" | "handoff";
   title: string;
   target: string;
 }
@@ -290,6 +297,23 @@ export interface WorkItem extends RoadmapRecord {
   status: ItemStatus;
   blocker: string;
   depends_on: string | null;
+  audit_candidate?: AuditCandidate;
+  audit?: {
+    status: "ready" | "running" | "failed" | "interrupted" | "needs update" | "awaiting acceptance" | "changes requested" | "accepted";
+    run: string | null;
+    attempts: number;
+    measured_attempts: number;
+    usage: TokenUsage | null;
+  };
+}
+
+export interface AuditCandidate {
+  commit: string;
+  producer: string;
+  workspace: string;
+  auditor: SessionSource;
+  checks: string;
+  decisions: string[];
 }
 
 export interface Milestone extends RoadmapRecord {

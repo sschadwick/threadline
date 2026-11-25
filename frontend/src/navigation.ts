@@ -12,9 +12,9 @@ export function projectHref(id: string) {
   return "#/projects/" + encodeURIComponent(id);
 }
 
-export function roadmapHref(project: string, milestone: string | null, item: string | null = null, review = false) {
+export function roadmapHref(project: string, milestone: string | null, item: string | null = null, kind?: "review" | "handoff") {
   return projectHref(project) + "?focus=" + encodeURIComponent(
-    (review ? "progress-" : "roadmap-") + (item || milestone || "section"),
+    (kind === "review" ? "progress-" : kind === "handoff" ? "handoff-" : "roadmap-") + (item || milestone || "section"),
   );
 }
 

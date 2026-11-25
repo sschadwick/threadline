@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { AuditHandoff } from "./AuditHandoff";
 import { api } from "./api";
-import { dateLabel, errorText, type ApplyDashboardChange, type Milestone, type Project, type RoadmapTarget,
+import { dateLabel, errorText, type ApplyDashboardChange, type DashboardState, type Milestone, type Project, type RoadmapTarget,
   type Session, type SessionSource } from "./model";
 import { roadmapHref } from "./navigation";
 import { RoadmapEditor } from "./RoadmapEditor";
@@ -12,6 +13,7 @@ interface Context {
   project: Project;
   sessions: Session[];
   providers: SessionSource[];
+  runner: DashboardState["runner"];
   onApply: ApplyDashboardChange;
   onResume: (session: Session) => void;
   onCopy: (text: string, confirmation: string) => void;
@@ -19,7 +21,8 @@ interface Context {
 
 export function NextActionCard({ project, onCopy }: Pick<Context, "project" | "onCopy">) {
   const next = project.next_action;
-  const href = roadmapHref(project.id, next.milestone, next.item, next.kind === "review");
+  const href = roadmapHref(project.id, next.milestone, next.item,
+    next.kind === "review" || next.kind === "handoff" ? next.kind : undefined);
   const selected = project.roadmap.find((milestone) => milestone.id === next.milestone);
   const target = next.item ? selected?.items.find((item) => item.id === next.item) : selected;
   return <section className="panel next-action-card" aria-labelledby="next-action-heading">
@@ -30,7 +33,7 @@ export function NextActionCard({ project, onCopy }: Pick<Context, "project" | "o
       {(next.kind === "work" || next.kind === "legacy") && <button type="button" className="button primary"
         onClick={() => onCopy(project.kickoff, "Continuation brief copied")}>Copy continuation brief</button>}
       {next.kind !== "legacy" && <a className="button secondary" href={href}>
-        {next.kind === "review" ? "Review proposal" : next.kind === "plan" ? "Open roadmap" : "View work"}
+        {next.kind === "review" ? "Review proposal" : next.kind === "handoff" ? "View handoff" : next.kind === "plan" ? "Open roadmap" : "View work"}
       </a>}
     </div>}
   </section>;
@@ -123,6 +126,8 @@ function RoadmapCard({ milestone, target, context, children }: {
     </p>}
     {!item && target.completed_on && <p className="small muted">Completed {dateLabel(target.completed_on)}</p>}
     {target.updates.length > 0 && <p className="small"><strong>Latest checkpoint</strong> {target.updates.at(-1)?.summary}</p>}
+    {item && <AuditHandoff project={project} item={target} location={location} sessions={sessions} runner={context.runner}
+      closed={closed || target.status === "done"} onApply={onApply} />}
     <div className="workflow-actions">
       <button type="button" className="button secondary" onClick={() => onCopy(target.brief, "Continuation brief copied")}>Copy continuation brief</button>
       {!closed && <>

@@ -20,6 +20,7 @@ from . import __version__
 from .activity import read_activity
 from .demo import demo_content
 from .discovery import suggest_projects
+from .handoff import PATTERN, audit_brief, audit_context, audit_status, binding, digest, save_candidate
 from .history import load_history, organize
 from .kickoff import eval_summary, new_decision, new_eval, render_kickoff, replay, revisit_state, update_revisit
 from .patterns import PATTERNS, checkpoint_fields, preview_kickoff
@@ -138,6 +139,19 @@ class Tracker:
             review = self.session_reviews.get(project["id"])
             fields = {k: project[k] for k in (*FIELDS, "status", "id", "checkpoint")}
             roadmap, attention = roadmap_view(project, {row["key"] for row in linked})
+            linked_keys = {row["key"] for row in linked}
+            for milestone in roadmap:
+                for item in milestone["items"]:
+                    if "audit_candidate" not in item:
+                        continue
+                    audit = audit_status(project, milestone, item, linked_keys, self.runs)
+                    item["audit"] = audit
+                    title = {"ready": "Audit candidate", "failed": "Retry audit", "interrupted": "Retry audit",
+                             "needs update": "Update audit handoff", "changes requested": "Address audit findings",
+                             "awaiting acceptance": "Accept audit"}.get(audit["status"])
+                    if title and milestone["status"] == "active" and not item["blocked_by"] and item["status"] != "done":
+                        attention.append({"kind": "handoff", "title": title, "milestone": milestone["id"],
+                                          "item": item["id"], "target": item["title"]})
             action = next_action(project, roadmap, attention)
             kickoff = render_kickoff(project, linked, decisions)
             for milestone in roadmap:
@@ -173,7 +187,8 @@ class Tracker:
                 "suggestions": suggestions, "scanned": self.scanned, "statuses": STATUSES,
                 "demo": self.demo, "patterns": PATTERNS, "runner": self.runner.options(),
                 "drafting": self.draft_lock.locked(),
-                "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False)}
+                "outbox": [{**{key: run[key] for key in RUN_FIELDS}, "acknowledged": run.get("acknowledged", False),
+                            "audit": run.get("audit"), "usage": run.get("usage")}
                            for run in reversed(self.runs)]}
 
     def save(self, projects, overrides, runs=None, *, dismissed_suggestions=None, session_reviews=None):
@@ -196,6 +211,8 @@ class Tracker:
         self.session_reviews = session_reviews
 
     def preview(self, data):
+        if data.get("audit") is True:
+            return self.preview_audit(data)
         project = next((p for p in self.projects if p["id"] == data.get("project")), None)
         if project is None:
             raise ValueError("Choose a project.")
@@ -205,6 +222,36 @@ class Tracker:
             self.refresh()
         linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
         return preview_kickoff(project, linked[project["id"]], data, self.runner.options())
+
+    def audit_target(self, project, data):
+        if self.scanned == 0:
+            self.refresh()
+        milestone, item = target_for(project.get("roadmap", []), data)
+        if item is milestone or milestone["status"] == "complete" or item["status"] == "done":
+            raise ValueError("Choose an open roadmap work item.")
+        linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
+        return milestone, item, {row["key"]: row for row in linked[project["id"]]}
+
+    def preview_audit(self, data):
+        project = self.roadmap_project(data)
+        milestone, item, linked = self.audit_target(project, data)
+        candidate = item.get("audit_candidate")
+        if candidate is None:
+            raise ValueError("Record a candidate first.")
+        context = audit_context(project, milestone, item, linked)
+        if context is None:
+            raise ValueError("The producer session or a selected decision changed. Update the handoff.")
+        options = self.runner.options()
+        provider, workspace = candidate["auditor"], candidate["workspace"]
+        if self.demo or provider not in options["providers"] or workspace not in options["workspaces"]:
+            raise ValueError("Enable the auditor runner for the producer workspace before previewing a launch.")
+        pattern = next(row for row in PATTERNS if row["id"] == PATTERN)
+        review = {"milestone": milestone["id"], "item": item["id"], "commit": candidate["commit"],
+                  "binding": binding(project, item, context)}
+        preview = {"project": project["id"], "pattern": PATTERN, "pattern_revision": pattern["revision"],
+                   "provider": provider, "workspace": workspace, "task": f"Audit {item['title']}",
+                   "brief": audit_brief(context), "checkpoint": checkpoint_fields(project), "audit": review}
+        return {**preview, "digest": digest({key: value for key, value in preview.items() if key != "checkpoint"})}
 
     def draft_project(self, data):
         if self.demo:
@@ -315,6 +362,15 @@ class Tracker:
 
     def update_roadmap(self, data):
         project = deepcopy(self.roadmap_project(data))
+        if data.get("action") == "audit candidate":
+            milestone, item, linked = self.audit_target(project, data)
+            if item["revision"] != data.get("revision"):
+                raise ValueError("The work item changed. Refresh it before saving.")
+            candidate = save_candidate(data, project, linked)
+            if candidate != item.get("audit_candidate"):
+                item.update(audit_candidate=candidate, revision=uuid4().hex)
+                milestone["revision"] = uuid4().hex
+            return self.save_roadmap(project)
         linked, _ = organize([row.copy() for row in self.rows], self.projects, self.overrides)
         change_roadmap(project.setdefault("roadmap", []), data, {row["key"] for row in linked[project["id"]]})
         return self.save_roadmap(project)
@@ -353,6 +409,8 @@ class Tracker:
             raise ValueError("Preview the kickoff again before starting the session.")
         if self.runner.stop.is_set() or any(run["status"] == "running" for run in self.runs):
             raise ValueError("A session is already running or Threadline is shutting down.")
+        if "audit" in preview and any(run["status"] == "completed" and run.get("audit") == preview["audit"] for run in self.runs):
+            raise ValueError("This handoff already has a completed audit. Open its result in the Outbox.")
         run = {**preview, "id": request_id, "status": "running", "started": int(time.time()),
                "finished": None, "session_id": None, "result": None, "error": "", "review": {}}
         self.save(self.projects, self.overrides, [*self.runs, run])
@@ -368,10 +426,16 @@ class Tracker:
     def finish_launch(self, run):
         try:
             session_id, result = self.runner.run(run)
+            usage = result.get("usage")
+            result = {key: value for key, value in result.items() if key != "usage"}
+            if "audit" in run:
+                review = {"audit": "pending"} if result["verdict"] == "pass" else {}
+            else:
+                review = {key: "pending" for key in ("checkpoint", "decision") if result[key]}
             completed = {**run, "status": "completed", "session_id": session_id, "result": result,
-                         "review": {key: "pending" for key in ("checkpoint", "decision") if result[key]}}
+                         "review": review, "usage": usage}
         except RunError as error:
-            completed = {**run, "status": "failed", "error": str(error)}
+            completed = {**run, "status": "failed", "error": str(error), "usage": error.usage}
         except OSError:
             completed = {**run, "status": "failed", "error": "Could not run the configured CLI in that workspace."}
         except (ValueError, KeyError, TypeError):
@@ -392,6 +456,8 @@ class Tracker:
     def review(self, data):
         run = next((item for item in self.runs if item["id"] == data.get("run")), None)
         key, action = data.get("proposal"), data.get("action")
+        if run is not None and key == "audit" and action == "accept":
+            return self.accept_audit(run)
         if run is None or key not in ("checkpoint", "decision") or action not in ("accept", "dismiss"):
             raise ValueError("Choose an Outbox proposal and review action.")
         if run["review"].get(key) != "pending":
@@ -415,6 +481,20 @@ class Tracker:
         state = "accepted" if action == "accept" else "dismissed"
         reviewed = {**run, "review": {**run["review"], key: state}}
         self.save(projects, self.overrides, [reviewed if item["id"] == run["id"] else item for item in self.runs])
+        return self.snapshot()
+
+    def accept_audit(self, run):
+        if run["review"].get("audit") == "accepted":
+            return self.snapshot()
+        if run["review"].get("audit") != "pending":
+            raise ValueError("Choose a passing audit awaiting acceptance.")
+        project = self.roadmap_project(run)
+        milestone, item, linked = self.audit_target(project, run["audit"])
+        context = audit_context(project, milestone, item, linked)
+        if context is None or binding(project, item, context) != run["audit"]["binding"]:
+            raise ValueError("The handoff changed after launch. Review the current candidate instead.")
+        reviewed = {**run, "review": {"audit": "accepted"}}
+        self.save(self.projects, self.overrides, [reviewed if item["id"] == run["id"] else item for item in self.runs])
         return self.snapshot()
 
     def acknowledge(self, data):

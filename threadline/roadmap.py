@@ -295,6 +295,9 @@ def next_action(project, roadmap, attention):
     review = next((entry for entry in attention if entry["milestone"] == active["id"] and entry["kind"] == "review"), None)
     if review:
         return {**review, "reason": review["target"]}
+    handoff = next((entry for entry in attention if entry["kind"] == "handoff"), None)
+    if handoff:
+        return {**handoff, "reason": handoff["target"]}
     item = next((i for i in active["items"] if i["status"] == "in progress" and not i["blocked_by"] and i["next"]), None)
     item = item or (None if active["next"] else next(
         (i for i in active["items"] if i["status"] == "todo" and not i["blocked_by"] and i["next"]), None
