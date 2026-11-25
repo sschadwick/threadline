@@ -22,3 +22,4 @@
 .outbox-title { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .outbox-proposal { margin-top: 8px; border: 1px solid var(--line); padding: 9px; border-radius: 5px; }
 .outbox-proposal h4 { margin: 0; font-size: 13px; }
+.audit-commit { overflow-wrap: anywhere; }

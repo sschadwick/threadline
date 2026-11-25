@@ -1,6 +1,6 @@
 import type {
   DashboardState, DecisionDraft, EvalDraft, KickoffDraft, KickoffPreview, ProjectDraft, ProjectDraftRequest, ProjectFields,
-  ProjectStateChange, Proposal, ReviewAction, SessionEvidence, SessionSource,
+  ProjectStateChange, Proposal, ReviewAction, RoadmapLocation, SessionEvidence, SessionSource,
 } from "./model";
 
 async function request<T = DashboardState>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
@@ -33,6 +33,11 @@ export const api = {
   launch: (draft: KickoffDraft, preview: KickoffPreview) => request("/api/launch", {
     ...draft, digest: preview.digest, request_id: preview.request_id,
   }),
+  previewAudit: (project: string, location: RoadmapLocation) =>
+    request<KickoffPreview>("/api/kickoff", { project, ...location, audit: true }),
+  startAudit: (project: string, location: RoadmapLocation, preview: KickoffPreview) =>
+    request("/api/launch", { project, ...location, audit: true, digest: preview.digest, request_id: preview.request_id }),
+  acceptAudit: (run: string) => request("/api/review", { run, proposal: "audit", action: "accept" }),
   review: (run: string, proposal: Proposal, action: ReviewAction) => request("/api/review", { run, proposal, action }),
   acknowledge: (run: string) => request("/api/run-acknowledge", { run }),
   sessionEvidence: (project: string, sessions: string[]) => request<SessionEvidence>("/api/session-review-context", { project, sessions }),

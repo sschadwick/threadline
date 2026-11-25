@@ -69,6 +69,12 @@ Each launch starts one read-only session with a five-minute limit and records th
 
 Threadline refreshes session activity every minute while the dashboard is visible. After you track a workspace, later sessions can match its checkout path or project name. You decide the status and next action. Manual links and unlinks take priority.
 
+### Hand off a candidate for independent audit
+
+From an open roadmap work item, choose **Set up audit handoff**. Select a linked producer session, record the full local Git commit and reported checks, and choose a Codex or Claude Code auditor and any relevant project decisions. **Preview auditor brief** shows the work item, criteria, candidate, checks, and selected decisions before launch. Threadline never includes either agent’s transcript in the handoff.
+
+Enable the auditor runner for the producer workspace and install Git on the runner host. Threadline exports the candidate into a temporary read-only runner workspace, using the files included by `git archive`. Run the audit explicitly and accept a passing result in **Outbox**. Changing the candidate or its review context requires a fresh audit. Work-item usage includes reported input and output tokens across audit attempts, including retries. A producer session started outside Threadline has separate usage.
+
 ## History and storage
 
 | Input | Default location | What Threadline reads |

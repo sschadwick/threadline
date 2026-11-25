@@ -77,7 +77,7 @@ export function App() {
         <ProjectRegister key={navigation.hash} data={data} view={navigation.view} initialFilter={navigation.filter} />}
       {navigation.project && (project ?
         <ProjectDetails key={project.id} project={project} sessions={linked} statuses={data.statuses}
-          providers={data.demo ? [] : data.runner.providers}
+          runner={data.demo ? { providers: [], workspaces: [] } : data.runner}
           needsAttention={projectQueue ? attentionSize(projectQueue) : 0} focus={navigation.projectFocus}
           onEdit={(project) => setEditor({ kind: "project", project })} onCopy={copy} onApply={apply} onNotify={notify}
           onKickoff={(project) => navigate("patterns", undefined, project)} {...sessionActions} />

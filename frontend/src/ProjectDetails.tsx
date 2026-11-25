@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { ProjectAgents } from "./AuditHandoff";
 import { ContinueProject } from "./ContinueProject";
 import { DecisionPanel } from "./DecisionPanel";
 import { LinkedSessions } from "./LinkedSessions";
 import { SessionAnalysis } from "./SessionAnalysis";
-import type { SessionSource } from "./model";
 import { dateLabel, errorText, type ApplyDashboardChange, type DashboardState, type Project, type Session } from "./model";
 import { attentionHref } from "./navigation";
 import { NextActionCard, ProjectRoadmap } from "./ProjectRoadmap";
@@ -15,7 +15,7 @@ interface Props extends SessionActions {
   project: Project;
   sessions: Session[];
   statuses: string[];
-  providers: SessionSource[];
+  runner: DashboardState["runner"];
   needsAttention: number;
   focus?: string;
   onEdit: (project: Project) => void;
@@ -25,7 +25,7 @@ interface Props extends SessionActions {
   onNotify: (message: string) => void;
 }
 
-export function ProjectDetails({ project, sessions, statuses, providers, needsAttention, focus,
+export function ProjectDetails({ project, sessions, statuses, runner, needsAttention, focus,
   onEdit, onCopy, onKickoff, onApply, onNotify, onLink, onResume }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +38,7 @@ export function ProjectDetails({ project, sessions, statuses, providers, needsAt
   }, []);
 
   useEffect(() => {
-    if (!focus?.startsWith("roadmap-") && !focus?.startsWith("progress-")) return;
+    if (!focus?.startsWith("roadmap-") && !focus?.startsWith("progress-") && !focus?.startsWith("handoff-")) return;
     const target = document.getElementById(focus);
     target?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: "start" });
@@ -97,10 +97,11 @@ export function ProjectDetails({ project, sessions, statuses, providers, needsAt
           <p>{project.summary || "No checkpoint recorded."}</p>
           <p className="evidence">{project.evidence && project.evidence + " · "}{dateLabel(project.checkpoint)}</p>
         </section>
-        <ProjectRoadmap project={project} sessions={sessions} providers={providers}
+        <ProjectAgents project={project} sessions={sessions} />
+        <ProjectRoadmap project={project} sessions={sessions} providers={runner.providers} runner={runner}
           onApply={onApply} onResume={onResume} onCopy={onCopy} />
         <ContinueProject project={project} pinned={pinned} onCopy={onCopy} onResume={onResume} onKickoff={onKickoff} />
-        <SessionAnalysis project={project} sessions={sessions} providers={providers} onApply={onApply} />
+        <SessionAnalysis project={project} sessions={sessions} providers={runner.providers} onApply={onApply} />
         <DecisionPanel project={project} sessions={sessions} onApply={onApply} />
       </div>
       <LinkedSessions sessions={sessions} pinned={pinned} saving={saving} onPin={(key) => void changeProject(

@@ -6,6 +6,7 @@ import selectors
 import shutil
 import signal
 import subprocess
+import tarfile
 import tempfile
 import time
 from pathlib import Path
@@ -39,10 +40,56 @@ RESULT_SCHEMA = object_schema({
     **{name: {"anyOf": [object_schema({field: {"type": "string"} for field in fields}), {"type": "null"}]}
        for name, fields in RESULT_FIELDS.items()},
 })
+AUDIT_SCHEMA = object_schema({
+    "commit": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["pass", "changes requested"]},
+    "summary": {"type": "string", "maxLength": 1200},
+})
 
 
 class RunError(RuntimeError):
-    pass
+    usage = None
+    output = b""
+
+
+def export_candidate(workspace, commit, destination):
+    command = ["git", "--no-replace-objects", "-C", str(workspace)]
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment["GIT_NO_LAZY_FETCH"] = "1"
+    archive = destination / "candidate.tar"
+    witness = destination / "candidate"
+    try:
+        result = subprocess.run([*command, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}"],
+                                capture_output=True, check=True, timeout=10, env=environment)
+        if result.stdout.decode().strip() != commit:
+            raise RunError("The candidate must identify a commit in the enrolled workspace.")
+        subprocess.run([*command, "archive", "--format=tar", f"--output={archive}", "--", commit],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=30, env=environment)
+        witness.mkdir()
+        with tarfile.open(archive) as source:
+            source.extractall(witness, filter="data")
+    except (OSError, subprocess.SubprocessError, tarfile.TarError) as error:
+        raise RunError("Could not export the exact candidate commit from the enrolled workspace.") from error
+    return witness
+
+
+def reported_usage(provider, output):
+    usage = None
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeError):
+            continue
+        if isinstance(event, dict) and event.get("type") == ("turn.completed" if provider == "codex" else "result"):
+            usage = event.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    values = [usage.get("input_tokens"), usage.get("output_tokens")]
+    if provider == "claude":
+        values.extend((usage.get("cache_creation_input_tokens", 0), usage.get("cache_read_input_tokens", 0)))
+    if any(type(value) is not int or value < 0 for value in values):
+        return None
+    return {"input_tokens": values[0] + sum(values[2:]), "output_tokens": values[1]}
 
 
 class Runner:
@@ -70,8 +117,38 @@ class Runner:
         workspace = Path(run["workspace"])
         if str(workspace.resolve(strict=True)) != str(workspace) or str(workspace) not in self.workspaces:
             raise RunError("The approved workspace changed before launch.")
-        output = self.execute(run["provider"], workspace, run["brief"], RESULT_SCHEMA, session_id=run["id"])
-        return parse_result(run["provider"], output)
+        if "audit" not in run:
+            return self.run_session(run, workspace)
+        with tempfile.TemporaryDirectory(prefix="threadline-audit-") as directory:
+            snapshot = export_candidate(workspace, run["audit"]["commit"], Path(directory))
+            return self.run_session(run, snapshot)
+
+    def run_session(self, run, workspace):
+        provider = run["provider"]
+        audit = run.get("audit")
+        schema = AUDIT_SCHEMA if audit else RESULT_SCHEMA
+        try:
+            output = self.execute(provider, workspace, run["brief"], schema, session_id=run["id"])
+        except RunError as error:
+            error.usage = reported_usage(provider, error.output)
+            raise
+        usage = reported_usage(provider, output)
+        try:
+            if audit:
+                session_id, result = parse_response(provider, output)
+                if (set(result) != set(AUDIT_SCHEMA["properties"]) or result.get("commit") != audit["commit"]
+                        or result.get("verdict") not in ("pass", "changes requested")):
+                    raise ValueError("Invalid audit result")
+                result["summary"] = required_text(result, "summary", 1200)
+            else:
+                session_id, result = parse_result(provider, output)
+        except (RunError, ValueError, KeyError, TypeError) as cause:
+            message = "The auditor did not return a valid result for the candidate commit." if audit else (
+                str(cause) if isinstance(cause, RunError) else "The runner response did not match the Outbox result format.")
+            error = RunError(message)
+            error.usage = usage
+            raise error from cause
+        return session_id, {**result, "usage": usage}
 
     def draft(self, provider, brief, schema):
         if provider not in self.commands:
@@ -156,6 +233,9 @@ class Runner:
                             raise RunError(f"Session exceeded the {timeout}-second limit.")
                     if child.returncode:
                         raise RunError(f"The runner exited with code {child.returncode}. Check the CLI on this host.")
+                except RunError as error:
+                    error.output = bytes(output)
+                    raise
                 finally:
                     try:
                         os.killpg(child.pid, signal.SIGKILL)
